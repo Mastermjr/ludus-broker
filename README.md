@@ -1,6 +1,6 @@
 # Ludus VibeRange Broker
 
-Discord-first participant reservation, two-hour lease, generation-bound
+Discord-first participant reservation, one-hour lease, generation-bound
 WireGuard delivery, and range-turnover automation for reusable Ludus workshop
 ranges.
 

@@ -258,7 +258,7 @@ PoC policy defaults are:
 
 - one active queue entry, offer, preparation, or lease per Discord user;
 - FIFO queue ordering by durable request time and reservation ID;
-- a fixed two-hour lease;
+- a fixed one-hour lease;
 - a ten-minute claim window before credentials are issued;
 - a configurable 30-minute rejoin cooldown after a completed lease;
 - no participant extension while another eligible participant is waiting;

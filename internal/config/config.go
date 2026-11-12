@@ -42,7 +42,7 @@ func Load() (Config, error) {
 		LudusBlueprintSHA256:       os.Getenv("VBR_LUDUS_BLUEPRINT_SHA256"),
 		LudusBlueprintSHA256BySlot: splitMap(os.Getenv("VBR_LUDUS_BLUEPRINT_SHA256_BY_SLOT")),
 		SlotIDs:                    split(env("VBR_SLOT_IDS", "user1,user2,user3,user4,user5")),
-		LeaseDuration:              2 * time.Hour,
+		LeaseDuration:              time.Hour,
 		PreparationLead:            15 * time.Minute,
 		NoShowGrace:                10 * time.Minute,
 		RejoinCooldown:             30 * time.Minute,
