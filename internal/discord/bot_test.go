@@ -264,7 +264,9 @@ func TestHandoffOverviewIsVisiblePlatformNeutralAndSecretFree(t *testing.T) {
 			t.Errorf("overview omitted %q", expected)
 		}
 	}
-	for _, forbidden := range []string{"@@", "PrivateKey =", "participant-private", "token="} {
+	for _, forbidden := range []string{
+		"@@", "PrivateKey =", "participant-private", "token=", "Set-ExecutionPolicy", "Unblock-File", "WindowStyle Hidden",
+	} {
 		if strings.Contains(value, forbidden) {
 			t.Errorf("overview contains template token or secret marker %q", forbidden)
 		}
@@ -291,7 +293,10 @@ func TestWindowsHandoffAssetsAreGeneralized(t *testing.T) {
 				t.Errorf("%s omitted %q", name, expected)
 			}
 		}
-		for _, forbidden := range []string{"@@", "viberange-user1", "198.51.100.4/32", "10.6.10.10", "participant-private"} {
+		for _, forbidden := range []string{
+			"@@", "viberange-user1", "198.51.100.4/32", "10.6.10.10", "participant-private",
+			"Set-ExecutionPolicy", "Unblock-File", "WindowStyle Hidden", "Remove-Item -LiteralPath $SourceProfile",
+		} {
 			if strings.Contains(value, forbidden) {
 				t.Errorf("%s retained non-generalized or secret value %q", name, forbidden)
 			}

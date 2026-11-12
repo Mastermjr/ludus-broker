@@ -58,12 +58,14 @@ be proven.
 ### Assignment
 
 The DM contains the slot label, expiration, one previewable Markdown overview,
-and one slot-scoped ZIP. The archive
-contains the `.conf`, Linux and Windows guides, and generated Bash and PowerShell
-acceptance scripts. Both scripts validate profile metadata, bring up the tunnel,
-check approved services, and tear down and remove the profile by default; the
-Linux script also adversarially expands client routes to prove server-side
-isolation before restoring them. Neither guide nor script contains a private
+and one slot-scoped ZIP plus its SHA-256 digest. The archive contains the
+`.conf`, Linux and Windows guides, and generated Bash and PowerShell acceptance
+scripts. Both scripts validate profile metadata, bring up the tunnel, check
+approved services, and tear down the installed tunnel/profile by default; the
+Linux script also removes its source profile and adversarially expands client
+routes to prove server-side isolation before restoring them. Windows leaves the
+downloaded ZIP/profile for explicit user deletion rather than exhibiting
+self-deleting-script behavior. Neither guide nor script contains a private
 key, Ludus login identity, API key, or participant password.
 
 The ten-minute no-show policy uses the WireGuard peer's latest handshake, not

@@ -40,7 +40,7 @@ Assignment: **@@SLOT@@**
 Tunnel address: **@@CLIENT_IP@@**  
 Assigned range: **@@ALLOWED_RANGE@@**
 
-The **.conf** file in this archive is a private, generation-bound credential. Do not paste it into chat, tickets, logs, screenshots, PowerShell history, or browser forms. The acceptance script removes the extracted profile when it exits. By default it also disconnects WireGuard and removes the protected installed copy.
+The **.conf** file in this archive is a private, generation-bound credential. Do not paste it into chat, tickets, logs, screenshots, PowerShell history, or browser forms. By default the acceptance script disconnects WireGuard and removes its protected installed copy. Delete the extracted ZIP and **.conf** yourself after testing.
 
 ## 1. Install WireGuard
 
@@ -64,12 +64,14 @@ Both commands must return **True**. Disable other overlay VPNs during the bounde
 Extract the ZIP into a temporary directory. Open **PowerShell as Administrator**, change to that directory, and run:
 
 ~~~powershell
-Set-ExecutionPolicy -Scope Process Bypass
-Unblock-File .\viberange-@@SLOT@@-acceptance.ps1
+Get-FileHash .\viberange-@@SLOT@@-acceptance.ps1 -Algorithm SHA256
+Get-Content .\viberange-@@SLOT@@-acceptance.ps1
 .\viberange-@@SLOT@@-acceptance.ps1 -ProfilePath .\viberange-@@SLOT@@.conf
 ~~~
 
-The script validates the assigned address and routes, protects the installed profile with an Administrators/SYSTEM-only ACL, starts WireGuard, checks the handshake, tests the assigned CH-UI, JupyterLab, and Caldera endpoints, verifies selected unapproved services are denied, then disconnects and removes both profile copies.
+Review the script before running it. If the machine's existing security policy blocks it, use the manual WireGuard steps below or ask an administrator for an approved signed copy.
+
+The script validates the assigned address and routes, protects the installed profile with an Administrators/SYSTEM-only ACL, starts the official WireGuard tunnel service, checks the handshake, tests the assigned CH-UI, JupyterLab, and Caldera endpoints, verifies selected unapproved services are denied, then disconnects and removes the protected installed profile.
 
 To keep the tunnel connected for browser testing:
 
@@ -77,21 +79,25 @@ To keep the tunnel connected for browser testing:
 .\viberange-@@SLOT@@-acceptance.ps1 -ProfilePath .\viberange-@@SLOT@@.conf -KeepTunnel
 ~~~
 
-## 3. Workshop endpoints
+## 3. Manual setup instead
+
+If scripts are blocked by policy, open the official WireGuard application and choose **Add Tunnel → Import tunnel(s) from file**, select **viberange-@@SLOT@@.conf**, and activate it. Confirm that the tunnel shows a recent handshake before opening workshop endpoints. When finished, deactivate and remove the tunnel in WireGuard, then delete the extracted ZIP and profile.
+
+## 4. Workshop endpoints
 
 - **CH-UI:** http://@@SERVICE_IP@@:3488
 - **JupyterLab:** http://@@SERVICE_IP@@:8889
 - **Caldera:** http://@@CALDERA_IP@@:8888
 
-Credentials and service tokens are intentionally not embedded in this archive.
+Credentials and service tokens are intentionally not embedded in this archive. The generated-script source template can be reviewed at https://github.com/Mastermjr/ludus-broker/blob/main/internal/discord/handoff_powershell.go.
 
-## 4. Troubleshooting
+## 5. Troubleshooting
 
 A running WireGuard tunnel service proves only that the local interface is enabled. The acceptance script also requires a handshake no more than 180 seconds old and successful assigned-service traffic. If it reports that no recent handshake exists, the profile may have been revoked, expired, reset, or removed from the live gateway; request a fresh assignment rather than repeatedly reinstalling the stale profile.
 
 The script treats the actual Windows service state as authoritative because the WireGuard installer process can occasionally return a nonzero exit code even after installing a running tunnel service. Failed validation always removes the service and protected profile, even when **-KeepTunnel** was requested.
 
-## 5. Disconnect and clean up
+## 6. Disconnect and clean up
 
 If **-KeepTunnel** was used, run from an elevated PowerShell window:
 
@@ -168,7 +174,7 @@ function Assert-Http {
 
 function Remove-TunnelService {
     if (-not (Get-Service -Name $TunnelService -ErrorAction SilentlyContinue)) { return }
-    $null = Start-Process -FilePath $WireGuardExe -Wait -PassThru -WindowStyle Hidden -ArgumentList @('/uninstalltunnelservice', $Interface)
+    $null = Start-Process -FilePath $WireGuardExe -Wait -PassThru -ArgumentList @('/uninstalltunnelservice', $Interface)
     for ($attempt = 0; $attempt -lt 20; $attempt++) {
         if (-not (Get-Service -Name $TunnelService -ErrorAction SilentlyContinue)) { return }
         Start-Sleep -Milliseconds 500
@@ -209,7 +215,7 @@ try {
     & icacls.exe $InstalledProfile /inheritance:r /grant:r '*S-1-5-32-544:(F)' '*S-1-5-18:(F)' | Out-Null
     if ($LASTEXITCODE -ne 0) { Stop-Failure 'could not protect the installed profile ACL' }
 
-    $install = Start-Process -FilePath $WireGuardExe -Wait -PassThru -WindowStyle Hidden -ArgumentList @('/installtunnelservice', $InstalledProfile)
+    $install = Start-Process -FilePath $WireGuardExe -Wait -PassThru -ArgumentList @('/installtunnelservice', $InstalledProfile)
     $service = $null
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
         $service = Get-Service -Name $TunnelService -ErrorAction SilentlyContinue
@@ -262,7 +268,6 @@ finally {
     $leaveConnected = $KeepTunnel -and $Validated
     if ($Started -and -not $leaveConnected) { Remove-TunnelService }
     if (-not $leaveConnected) { Remove-Item -LiteralPath $InstalledProfile -Force -ErrorAction SilentlyContinue }
-    if ($SourceProfile -and $SourceProfile -ne $InstalledProfile) { Remove-Item -LiteralPath $SourceProfile -Force -ErrorAction SilentlyContinue }
 }
 
 if ($KeepTunnel) {

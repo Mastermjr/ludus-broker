@@ -110,10 +110,12 @@ Read ` + "`viberange-@@SLOT@@-linux-setup.md`" + ` inside the ZIP for package in
 Install official WireGuard for Windows from https://www.wireguard.com/install/. Extract the ZIP, open **PowerShell as Administrator**, then run:
 
 ~~~powershell
-Set-ExecutionPolicy -Scope Process Bypass
-Unblock-File .\viberange-@@SLOT@@-acceptance.ps1
+Get-FileHash .\viberange-@@SLOT@@-acceptance.ps1 -Algorithm SHA256
+Get-Content .\viberange-@@SLOT@@-acceptance.ps1
 .\viberange-@@SLOT@@-acceptance.ps1 -ProfilePath .\viberange-@@SLOT@@.conf
 ~~~
+
+Review the script first. If the machine's existing security policy blocks it, use the official WireGuard GUI instructions in the detailed Windows guide instead of changing security settings.
 
 Read ` + "`viberange-@@SLOT@@-windows-setup.md`" + ` inside the ZIP for full installation, browser testing, ` + "`-KeepTunnel`" + `, and cleanup instructions.
 

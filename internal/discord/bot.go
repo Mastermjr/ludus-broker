@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -618,7 +619,8 @@ func (b *Bot) sendWireGuardDM(assignment *domain.Assignment, profile []byte, pee
 	if err != nil {
 		return fmt.Errorf("generate WireGuard handoff overview: %w", err)
 	}
-	message := fmt.Sprintf("**%s**\n\nSlot: `%s`\nExpires: %s\n\nKeep the ZIP and `.conf` private. Discord can preview the attached Markdown overview; the ZIP contains your profile and complete Linux/Windows setup files. Access stops when your lease ends.", prefix, assignment.SlotID, formatLeaseExpiration(assignment.LeaseEnd))
+	archiveHash := sha256.Sum256(archive)
+	message := fmt.Sprintf("**%s**\n\nSlot: `%s`\nExpires: %s\nZIP SHA-256: `%x`\n\nKeep the ZIP and `.conf` private. Discord can preview the attached Markdown overview; the ZIP contains your profile and complete Linux/Windows setup files. Access stops when your lease ends.", prefix, assignment.SlotID, formatLeaseExpiration(assignment.LeaseEnd), archiveHash)
 	_, err = b.session.ChannelMessageSendComplex(channel.ID, &discordgo.MessageSend{
 		Content: message,
 		Files: []*discordgo.File{
