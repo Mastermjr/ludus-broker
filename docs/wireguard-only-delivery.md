@@ -142,6 +142,8 @@ Before production cutover:
 
 The plugin is installed and user1 profile/revocation, router cleanup, and
 network-isolation acceptance have passed. The service is suitable for
-supervised multi-slot testing. User2–user5 repetition and sanitized evidence
-remain delegated to live-agent validation; enable-at-boot and unattended reboot
-cutover are explicitly deferred.
+multi-slot testing. User2–user5 repetition and sanitized evidence remain
+delegated to live-agent validation. The broker service and encrypted-backup
+timer are enabled across reboot; two consecutive VM reboot checks confirmed
+fail-closed startup, automatic retry after early network unavailability, plugin
+health, all-slot blueprint approval, Discord reconnection, and SQLite state.

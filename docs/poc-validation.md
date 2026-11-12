@@ -82,8 +82,11 @@ The supervised-testing release has two delegated evidence tasks:
 - repeat final WireGuard acceptance on user2–user5;
 - publish the sanitized all-slot acceptance record and final operations notes.
 
-Unattended reboot persistence, enable-at-boot, and formal production cutover are
-explicitly deferred. The current service may be run for supervised testing but
-must not be represented as completed unattended production cutover.
+The broker and encrypted-backup timer are enabled across reboot. Two consecutive
+VM reboots confirmed SQLite state preservation and automatic recovery: the
+first service attempt may fail closed before the private route is installed,
+then systemd retry connects to plugin v1.1.0, validates every approved slot,
+reconnects Discord, and remains active. User2–user5 acceptance and the final
+sanitized report remain delegated to live-agent testing.
 
 No normal-user browser automation or synthetic Discord user account is used.

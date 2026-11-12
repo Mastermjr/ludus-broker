@@ -10,9 +10,10 @@ The broker provides guild-scoped `/range` commands, a SQLite-backed queue and
 assignment worker, durable lifecycle jobs, private three-file WireGuard DM
 handoffs, Discord resource discovery, and live Discord/Ludus diagnostics. The
 Ludus 2.3 plugin is installed and live join/status/leave, revocation, router
-cleanup, backup/restore, and user1 isolation acceptance have passed. The broker
-is ready for supervised multi-slot testing; unattended reboot persistence and
-production enable-at-boot remain explicitly deferred.
+cleanup, backup/restore, user1 isolation acceptance, and two consecutive VM
+reboot recovery checks have passed. The broker and encrypted-backup timer are
+enabled across reboot; user2–user5 acceptance and final sanitized evidence
+remain delegated to live-agent testing.
 
 ## Participant experience
 
