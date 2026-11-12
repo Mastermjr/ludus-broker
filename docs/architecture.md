@@ -310,7 +310,7 @@ A normal assignment performs:
 5. verify range identity, power, testing state, and readiness;
 6. issue a fresh generation-bound WireGuard peer through the Ludus plugin;
 7. persist only its peer fingerprint and issue timestamp;
-8. DM the initiating user the `.conf` attachment and exact expiration;
+8. build one in-memory ZIP containing the `.conf`, Linux/Windows guides, and Bash/PowerShell acceptance scripts, then DM it with the exact expiration;
 9. mark the lease assigned only after successful DM upload.
 
 At expiration or early release, access is revoked before cleanup. The slot is
@@ -327,7 +327,7 @@ release, no-show reclamation, or failed delivery:
 - participants never receive Ludus or Proxmox credentials;
 - each assignment replaces the slot's prior WireGuard peer;
 - the profile is never placed in channels, SQLite, process arguments, logs, or audit detail;
-- the `.conf` is uploaded once as a private DM attachment;
+- the `.conf` is uploaded once inside a private DM ZIP assembled only in bounded memory;
 - only peer fingerprint, generation, issue/revoke time, and handshake metadata persist;
 - a delivery failure revokes the peer before the range is reused.
 

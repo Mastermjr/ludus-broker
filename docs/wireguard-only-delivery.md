@@ -7,8 +7,9 @@ They must never receive Ludus API keys, Proxmox/PAM passwords, host SSH
 credentials, or direct Proxmox access. The broker retains its protected Ludus
 administrator credential solely for lifecycle automation.
 
-The profile is delivered as a `.conf` attachment in a private Discord DM from
-the bot. Slash-command acknowledgements, status, and failures remain ephemeral
+The profile is delivered inside one ZIP attachment in a private Discord DM from
+the bot. The archive also contains generated Linux and Windows setup guides and
+bounded Bash and PowerShell acceptance scripts. Slash-command acknowledgements, status, and failures remain ephemeral
 in the configured workshop channel. Public channel messages never contain the
 profile.
 
@@ -18,7 +19,7 @@ A WireGuard configuration contains a client private key and is secret material.
 It may exist only in:
 
 - bounded plugin and broker memory while an assignment is prepared;
-- the initiating participant's private Discord DM attachment;
+- the initiating participant's private Discord DM ZIP attachment;
 - the participant's downloaded file.
 
 It must not be persisted in SQLite, logs, audit detail, Beads, process arguments,
@@ -41,8 +42,9 @@ For a selected `user1`–`user5` slot, the broker must:
 4. ask the root-context Ludus plugin to replace the slot's WireGuard peer with
    a fresh generation-bound keypair;
 5. persist only the generation, peer fingerprint, and issue timestamp;
-6. DM the `.conf`, a non-secret Linux setup guide, and a generated acceptance
-   script to the initiating Discord user;
+6. build one in-memory ZIP containing the `.conf`, non-secret Linux and Windows
+   guides, and generated Bash and PowerShell acceptance scripts, then DM it to
+   the initiating Discord user;
 7. commit the lease only after Discord confirms the complete DM upload.
 
 Before mutating a range, the broker sends a private preparation notice to prove
@@ -54,12 +56,13 @@ be proven.
 
 ### Assignment
 
-The DM contains the slot label, expiration, `.conf`, Linux setup guide, and a
-slot-scoped acceptance script. The script validates profile metadata, brings up
-the tunnel, checks approved services, adversarially expands client routes to
-prove server-side isolation, restores the peer configuration, and always tears
-down and removes the profile. Neither guide nor script contains a private key,
-Ludus login identity, API key, or participant password.
+The DM contains the slot label, expiration, and one slot-scoped ZIP. The archive
+contains the `.conf`, Linux and Windows guides, and generated Bash and PowerShell
+acceptance scripts. Both scripts validate profile metadata, bring up the tunnel,
+check approved services, and tear down and remove the profile by default; the
+Linux script also adversarially expands client routes to prove server-side
+isolation before restoring them. Neither guide nor script contains a private
+key, Ludus login identity, API key, or participant password.
 
 The ten-minute no-show policy uses the WireGuard peer's latest handshake, not
 Ludus API activity. A lease without a post-issue handshake after the configured
@@ -129,7 +132,7 @@ Before production cutover:
 - plugin unit tests and compatible Ludus plugin build pass;
 - participant API-key delivery is absent from code and participant messages;
 - every slash-command response is ephemeral;
-- the `.conf` is sent only as a private DM attachment;
+- the `.conf` is packaged only in a single private DM ZIP attachment;
 - disabled-DM failure revokes the new peer and safely resets the slot;
 - a new profile connects and its predecessor no longer handshakes;
 - each profile reaches only its intended workshop range and cannot reach Ludus,

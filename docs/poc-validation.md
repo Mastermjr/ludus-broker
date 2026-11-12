@@ -69,7 +69,7 @@ off-VM copy, restore, and integrity testing passed. Required Discord and Ludus
 egress and restricted management ingress were verified.
 
 Human user1 acceptance passed `/range join`, `/range status`, and `/range leave`,
-three-file private DM delivery, real WireGuard handshake, generation revocation,
+private DM handoff delivery, real WireGuard handshake, generation revocation,
 30-minute cooldown and audited thaw, assigned CH-UI/Jupyter/Caldera access, and
 adversarial same-range, cross-range, Ludus, Proxmox, and management denial. The
 plugin v1.1 router cleanup passed direct and integrated reset validation, and

@@ -1,6 +1,8 @@
 package discord
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -243,6 +245,136 @@ func TestLinuxHandoffAssetsAreScopedAndSecretFree(t *testing.T) {
 	}
 	if _, err := linuxAcceptanceScript("../../bad", peer); err == nil {
 		t.Fatal("unsafe slot was accepted")
+	}
+}
+
+func TestWindowsHandoffAssetsAreGeneralized(t *testing.T) {
+	peer := ludus.WireGuardPeer{UserID: "user4", ClientIP: "198.51.100.7/32", AllowedRange: "10.12.0.0/16"}
+	guide, err := windowsHandoffGuide("user4", peer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, err := windowsAcceptanceScript("user4", peer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string][]byte{"guide": guide, "script": script} {
+		value := string(data)
+		for _, expected := range []string{"user4", "198.51.100.7/32", "10.12.0.0/16", "10.12.10.10", "10.12.20.20"} {
+			if !strings.Contains(value, expected) {
+				t.Errorf("%s omitted %q", name, expected)
+			}
+		}
+		for _, forbidden := range []string{"@@", "viberange-user1", "198.51.100.4/32", "10.6.10.10", "participant-private"} {
+			if strings.Contains(value, forbidden) {
+				t.Errorf("%s retained non-generalized or secret value %q", name, forbidden)
+			}
+		}
+	}
+	if !strings.Contains(string(script), "$ExpectedClientAddress = '198.51.100.7'") {
+		t.Fatal("PowerShell script did not derive the host address from handoff metadata")
+	}
+	if !strings.Contains(string(script), "$DeniedIp = '10.12.30.30'") {
+		t.Fatal("PowerShell script did not derive the denied-service host from the assigned range")
+	}
+	if _, lookupErr := exec.LookPath("pwsh"); lookupErr == nil {
+		path := filepath.Join(t.TempDir(), "acceptance.ps1")
+		if err := os.WriteFile(path, script, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		parser := `$tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile($env:VBR_PS_PARSE_PATH, [ref]$tokens, [ref]$errors) | Out-Null; if ($errors.Count -ne 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }`
+		command := exec.Command("pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", parser)
+		command.Env = append(os.Environ(), "VBR_PS_PARSE_PATH="+path)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("generated PowerShell syntax: %v: %s", err, output)
+		}
+	}
+	if _, err := windowsAcceptanceScript("user6", peer); err == nil {
+		t.Fatal("unsafe Windows handoff slot was accepted")
+	}
+}
+
+func TestWindowsHandoffAssetsSupportEverySlot(t *testing.T) {
+	cases := []struct {
+		slot, client, network, service string
+	}{
+		{"user1", "198.51.100.4/32", "10.6.0.0/16", "10.6.10.10"},
+		{"user2", "198.51.100.5/32", "10.7.0.0/16", "10.7.10.10"},
+		{"user3", "198.51.100.6/32", "10.10.0.0/16", "10.10.10.10"},
+		{"user4", "198.51.100.7/32", "10.12.0.0/16", "10.12.10.10"},
+		{"user5", "198.51.100.8/32", "10.13.0.0/16", "10.13.10.10"},
+	}
+	for _, test := range cases {
+		t.Run(test.slot, func(t *testing.T) {
+			peer := ludus.WireGuardPeer{UserID: test.slot, ClientIP: test.client, AllowedRange: test.network}
+			for name, generate := range map[string]func(string, ludus.WireGuardPeer) ([]byte, error){
+				"guide":  windowsHandoffGuide,
+				"script": windowsAcceptanceScript,
+			} {
+				asset, err := generate(test.slot, peer)
+				if err != nil {
+					t.Fatal(err)
+				}
+				value := string(asset)
+				for _, expected := range []string{test.slot, test.client, test.network, test.service} {
+					if !strings.Contains(value, expected) {
+						t.Errorf("%s omitted %q", name, expected)
+					}
+				}
+				if strings.Contains(value, "@@") {
+					t.Errorf("%s retained a template token", name)
+				}
+			}
+		})
+	}
+}
+
+func TestWireGuardHandoffArchiveContainsOnePlatformBundle(t *testing.T) {
+	peer := ludus.WireGuardPeer{UserID: "user2", ClientIP: "198.51.100.5/32", AllowedRange: "10.7.0.0/16"}
+	profile := []byte("[Interface]\nPrivateKey = archive-only-secret\nAddress = 198.51.100.5/32\n\n[Peer]\nAllowedIPs = 10.7.0.0/16\n")
+	bundle, err := wireGuardHandoffArchive("user2", profile, peer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := zip.NewReader(bytes.NewReader(bundle), int64(len(bundle)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string]os.FileMode{
+		"viberange-user2.conf":             0o600,
+		"viberange-user2-linux-setup.md":   0o600,
+		"viberange-user2-acceptance.sh":    0o700,
+		"viberange-user2-windows-setup.md": 0o600,
+		"viberange-user2-acceptance.ps1":   0o700,
+	}
+	if len(reader.File) != len(expected) {
+		t.Fatalf("archive entries=%d, want %d", len(reader.File), len(expected))
+	}
+	for _, file := range reader.File {
+		wantMode, ok := expected[file.Name]
+		if !ok {
+			t.Errorf("unexpected archive entry %q", file.Name)
+			continue
+		}
+		if file.Mode().Perm() != wantMode {
+			t.Errorf("%s mode=%o, want %o", file.Name, file.Mode().Perm(), wantMode)
+		}
+		stream, openErr := file.Open()
+		if openErr != nil {
+			t.Fatal(openErr)
+		}
+		content, readErr := io.ReadAll(stream)
+		_ = stream.Close()
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if file.Name == "viberange-user2.conf" {
+			if !bytes.Equal(content, profile) {
+				t.Fatal("archive profile differs from transient source")
+			}
+		} else if bytes.Contains(content, []byte("archive-only-secret")) || bytes.Contains(content, []byte("@@")) {
+			t.Errorf("%s contains profile secret or template token", file.Name)
+		}
 	}
 }
 

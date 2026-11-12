@@ -531,7 +531,7 @@ func (b *Bot) sendPreparationNotice(userID string) error {
 	if err != nil {
 		return err
 	}
-	_, err = b.session.ChannelMessageSend(channel.ID, "Your VibeRange assignment is being prepared. I will send the private WireGuard `.conf` attachment here when it is ready.")
+	_, err = b.session.ChannelMessageSend(channel.ID, "Your VibeRange assignment is being prepared. I will send one private ZIP containing your WireGuard profile and Linux/Windows setup files when it is ready.")
 	return err
 }
 
@@ -588,21 +588,16 @@ func (b *Bot) sendWireGuardDM(assignment *domain.Assignment, profile []byte, pee
 	if simulated {
 		prefix = "Your simulated VibeRange lease is ready. This profile is not usable."
 	}
-	guide, err := linuxHandoffGuide(assignment.SlotID, peer)
+	archive, err := wireGuardHandoffArchive(assignment.SlotID, profile, peer)
 	if err != nil {
-		return fmt.Errorf("generate Linux handoff guide: %w", err)
+		return fmt.Errorf("generate WireGuard handoff archive: %w", err)
 	}
-	script, err := linuxAcceptanceScript(assignment.SlotID, peer)
-	if err != nil {
-		return fmt.Errorf("generate Linux acceptance script: %w", err)
-	}
-	message := fmt.Sprintf("**%s**\n\nSlot: `%s`\nExpires: %s\n\nKeep the `.conf` private. Read the Markdown guide, or run the attached acceptance script with the profile path. Access stops when your lease ends.", prefix, assignment.SlotID, formatLeaseExpiration(assignment.LeaseEnd))
+	defer zero(archive)
+	message := fmt.Sprintf("**%s**\n\nSlot: `%s`\nExpires: %s\n\nKeep the ZIP and `.conf` private. Extract the single attached archive, then follow the Linux or Windows guide inside. Access stops when your lease ends.", prefix, assignment.SlotID, formatLeaseExpiration(assignment.LeaseEnd))
 	_, err = b.session.ChannelMessageSendComplex(channel.ID, &discordgo.MessageSend{
 		Content: message,
 		Files: []*discordgo.File{
-			{Name: "viberange-" + assignment.SlotID + ".conf", ContentType: "text/plain", Reader: bytes.NewReader(profile)},
-			{Name: "viberange-" + assignment.SlotID + "-linux-setup.md", ContentType: "text/markdown", Reader: bytes.NewReader(guide)},
-			{Name: "viberange-" + assignment.SlotID + "-acceptance.sh", ContentType: "text/x-shellscript", Reader: bytes.NewReader(script)},
+			{Name: "viberange-" + assignment.SlotID + "-handoff.zip", ContentType: "application/zip", Reader: bytes.NewReader(archive)},
 		},
 	})
 	return err

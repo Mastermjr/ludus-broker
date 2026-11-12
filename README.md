@@ -7,8 +7,8 @@ ranges.
 ## Status
 
 The broker provides guild-scoped `/range` commands, a SQLite-backed queue and
-assignment worker, durable lifecycle jobs, private three-file WireGuard DM
-handoffs, Discord resource discovery, and live Discord/Ludus diagnostics. The
+assignment worker, durable lifecycle jobs, private single-ZIP WireGuard DM
+handoffs for Linux and Windows, Discord resource discovery, and live Discord/Ludus diagnostics. The
 Ludus 2.3 plugin is installed and live join/status/leave, revocation, router
 cleanup, backup/restore, user1 isolation acceptance, and two consecutive VM
 reboot recovery checks have passed. The broker and encrypted-backup timer are
@@ -23,9 +23,10 @@ remain delegated to live-agent testing.
 /range status
 ```
 
-When a slot is ready, the bot sends the participant a private DM containing a
-fresh generation-bound WireGuard `.conf`, a Linux setup guide, a bounded
-acceptance script, the slot label, and lease expiration. The peer is revoked at
+When a slot is ready, the bot sends the participant one private ZIP containing a
+fresh generation-bound WireGuard `.conf`, Linux and Windows setup guides, and
+bounded Bash and PowerShell acceptance scripts. The DM also states the slot and
+lease expiration. The peer is revoked at
 expiry or after a ten-minute
 no-show, then the broker resets and verifies the range before returning it to
 the queue. Participants never receive a Ludus API key.
@@ -112,7 +113,7 @@ reconciles expired and incomplete leases before accepting new queue work.
 - Discord and Ludus secrets are staged as systemd credentials at runtime and are never database fields.
 - Participants never receive Ludus API keys, PAM passwords, or management credentials.
 - A fresh WireGuard peer is issued per assignment generation and revoked before cleanup.
-- The full profile exists only in bounded memory and the participant's private Discord DM attachment; SQLite stores non-secret peer metadata only.
+- The full profile and generated ZIP exist only in bounded memory and the participant's private Discord DM attachment; SQLite stores non-secret peer metadata only.
 - SQLite, configuration, and credential paths use restrictive service-user
   permissions.
 - Participant ranges never host the broker and cannot reset its state.

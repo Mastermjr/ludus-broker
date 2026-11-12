@@ -11,8 +11,10 @@ peer lifecycle, recovery, or correctness testing.
 The WireGuard-only decision in `docs/wireguard-only-delivery.md` supersedes all
 prior participant API-key handoff language. Participant Ludus API keys, PAM or
 Proxmox credentials, and host SSH credentials must never be delivered. The
-approved profile path is a `.conf` attachment in the initiating user's private
-Discord DM; slash-command responses remain ephemeral status only.
+approved profile path is a single in-memory ZIP attachment in the initiating
+user's private Discord DM. It contains the `.conf`, Linux/Windows guides, and
+Bash/PowerShell acceptance scripts; slash-command responses remain ephemeral
+status only.
 
 This file is public-safe desired-state documentation. Deployment addresses,
 VM identifiers, Discord identifiers, API keys, SSH keys, participant keys,
@@ -106,7 +108,7 @@ Out-of-band assignment preparation performs:
 9. revoke the prior generation's WireGuard peer and prove the old profile fails;
 10. issue a fresh generation-bound WireGuard profile and non-secret revocation handle;
 11. verify the profile reaches only approved participant-facing services;
-12. send the `.conf` as a private Discord DM attachment;
+12. send one private Discord DM ZIP containing the `.conf` and platform setup/acceptance files;
 13. move the slot to `ASSIGNED` only after Discord confirms the DM upload.
 
 ### Lease teardown

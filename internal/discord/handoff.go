@@ -72,7 +72,7 @@ Assignment: **@@SLOT@@**
 Tunnel address: **@@CLIENT_IP@@**  
 Assigned range: **@@ALLOWED_RANGE@@**
 
-The accompanying .conf file is a private, generation-bound credential. Do not paste it into chat, tickets, logs, or screenshots. The acceptance script removes the installed and downloaded profile when it exits.
+The .conf file in this archive is a private, generation-bound credential. Do not paste it into chat, tickets, logs, or screenshots. The acceptance script removes the installed and extracted profile when it exits.
 
 ## 1. Install prerequisites
 
@@ -105,7 +105,7 @@ On NixOS, set networking.firewall.checkReversePath = "loose" in the machine's pr
 
 ## 3. Run the bounded acceptance test
 
-Keep the three Discord attachments in one directory, remove browser-added filename suffixes such as (1), then run:
+Extract the Discord ZIP into a temporary directory, then run:
 
 ~~~bash
 chmod 700 viberange-@@SLOT@@-acceptance.sh
