@@ -236,12 +236,27 @@ func TestLinuxHandoffAssetsAreScopedAndSecretFree(t *testing.T) {
 	if strings.Contains(strings.ToLower(string(guide)), "token=") {
 		t.Fatal("guide embedded a service token")
 	}
+	for _, expected := range []string{"--background", "--cleanup", "leave_running=true", "assigned CH-UI, Jupyter, and Caldera services"} {
+		if !strings.Contains(string(script), expected) {
+			t.Errorf("Linux script omitted lifecycle behavior %q", expected)
+		}
+	}
+	for _, obsolete := range []string{"adversarial", "cross-range", "management service", "10.11.66.0/24", "unapproved assigned-range"} {
+		if strings.Contains(string(script), obsolete) {
+			t.Errorf("Linux script retained obsolete inaccessible-network probe %q", obsolete)
+		}
+	}
 	path := filepath.Join(t.TempDir(), "acceptance.sh")
 	if err := os.WriteFile(path, script, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if output, err := exec.Command("bash", "-n", path).CombinedOutput(); err != nil {
 		t.Fatalf("generated script syntax: %v: %s", err, output)
+	}
+	if _, lookupErr := exec.LookPath("shellcheck"); lookupErr == nil {
+		if output, err := exec.Command("shellcheck", path).CombinedOutput(); err != nil {
+			t.Fatalf("generated script ShellCheck: %v: %s", err, output)
+		}
 	}
 	if _, err := linuxAcceptanceScript("../../bad", peer); err == nil {
 		t.Fatal("unsafe slot was accepted")

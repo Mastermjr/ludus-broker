@@ -60,12 +60,13 @@ be proven.
 The DM contains the slot label, expiration, one previewable Markdown overview,
 and one slot-scoped ZIP plus its SHA-256 digest. The archive contains the
 `.conf`, Linux and Windows guides, and generated Bash and PowerShell acceptance
-scripts. Both scripts validate profile metadata, bring up the tunnel, check
-approved services, and tear down the installed tunnel/profile by default; the
-Linux script also removes its source profile and adversarially expands client
-routes to prove server-side isolation before restoring them. Windows leaves the
-downloaded ZIP/profile for explicit user deletion rather than exhibiting
-self-deleting-script behavior. Neither guide nor script contains a private
+scripts. Both scripts validate profile metadata, bring up the tunnel, and check
+intended participant services. Linux bounded mode tears down and removes the
+profile automatically; `--background` leaves the validated interface running
+and `--cleanup` later removes it independently. Participant scripts do not probe
+intentionally inaccessible networks; server-side isolation remains an
+operator acceptance gate. Windows removes its installed tunnel/profile but
+leaves the downloaded ZIP/profile for explicit user deletion. Neither guide nor script contains a private
 key, Ludus login identity, API key, or participant password.
 
 The ten-minute no-show policy uses the WireGuard peer's latest handshake, not

@@ -100,10 +100,12 @@ Install WireGuard tools, then run:
 
 ~~~bash
 chmod 700 viberange-@@SLOT@@-acceptance.sh
-./viberange-@@SLOT@@-acceptance.sh ./viberange-@@SLOT@@.conf
+./viberange-@@SLOT@@-acceptance.sh --background ./viberange-@@SLOT@@.conf
+# Later:
+./viberange-@@SLOT@@-acceptance.sh --cleanup
 ~~~
 
-Read ` + "`viberange-@@SLOT@@-linux-setup.md`" + ` inside the ZIP for package installation, manual setup, and cleanup details.
+Use the script without ` + "`--background`" + ` for a bounded test that cleans up automatically. Read ` + "`viberange-@@SLOT@@-linux-setup.md`" + ` inside the ZIP for package installation, manual setup, and cleanup details.
 
 ### Windows 10/11
 
@@ -134,7 +136,7 @@ Assignment: **@@SLOT@@**
 Tunnel address: **@@CLIENT_IP@@**  
 Assigned range: **@@ALLOWED_RANGE@@**
 
-The .conf file in this archive is a private, generation-bound credential. Do not paste it into chat, tickets, logs, or screenshots. The acceptance script removes the installed and extracted profile when it exits.
+The .conf file in this archive is a private, generation-bound credential. Do not paste it into chat, tickets, logs, or screenshots. Normal acceptance mode cleans up automatically; ` + "`--background`" + ` deliberately leaves the tunnel and profile installed until a separate ` + "`--cleanup`" + ` invocation.
 
 ## 1. Install prerequisites
 
@@ -174,7 +176,21 @@ chmod 700 viberange-@@SLOT@@-acceptance.sh
 ./viberange-@@SLOT@@-acceptance.sh ./viberange-@@SLOT@@.conf
 ~~~
 
-The script validates the profile, installs it mode 0600, starts WireGuard, checks the handshake and assigned routes, tests CH-UI and Jupyter connectivity, probes denied services, adversarially expands client routes to verify server-side isolation, restores the peer configuration, tears down the interface, and removes the private profile.
+The script validates the profile, installs it mode 0600, starts WireGuard, checks the handshake and assigned routes, and tests the intended CH-UI, JupyterLab, and Caldera services. It no longer probes intentionally inaccessible networks.
+
+To leave the validated tunnel running in the background:
+
+~~~bash
+./viberange-@@SLOT@@-acceptance.sh --background ./viberange-@@SLOT@@.conf
+~~~
+
+The WireGuard interface persists without a foreground script process. When finished, run cleanup separately from the same extracted directory:
+
+~~~bash
+./viberange-@@SLOT@@-acceptance.sh --cleanup
+~~~
+
+Cleanup stops the interface and removes the installed profile plus the canonical extracted profile. If the profile was renamed, pass its path after ` + "`--cleanup`" + `.
 
 ## 4. Manual lifecycle instead
 
@@ -208,42 +224,69 @@ expected_client='@@CLIENT_IP@@'
 expected_range='@@ALLOWED_RANGE@@'
 service_ip='@@SERVICE_IP@@'
 gateway='198.51.100.1/32'
-profile=${1:-}
 interface="viberange-${slot}"
 installed="/etc/wireguard/${interface}.conf"
-peer=''
-old_allowed=''
-started=false
+canonical_source="./viberange-${slot}.conf"
+mode='bounded'
+profile=''
+leave_running=false
 source_profile=''
-added_routes=()
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 pass() { printf 'PASS: %s\n' "$*"; }
+usage() {
+  printf 'Usage:\n  %s [--background] <profile>\n  %s --cleanup [profile]\n' "$0" "$0" >&2
+  exit 2
+}
+
+while (($#)); do
+  case "$1" in
+    --background)
+      [[ $mode == bounded ]] || usage
+      mode='background'
+      ;;
+    --cleanup)
+      [[ $mode == bounded ]] || usage
+      mode='cleanup'
+      ;;
+    -h|--help) usage ;;
+    --*) fail "unknown option: $1" ;;
+    *)
+      [[ -z $profile ]] || usage
+      profile=$1
+      ;;
+  esac
+  shift
+done
+
+[[ $interface =~ ^[a-zA-Z0-9_=+.-]{1,15}$ ]] || fail "unsafe WireGuard interface name"
 
 cleanup() {
   set +e
-  if [[ -n $peer && -n $old_allowed ]]; then
-    sudo wg set "$interface" peer "$peer" allowed-ips "$old_allowed" >/dev/null 2>&1
-  fi
-  for route in "${added_routes[@]}"; do
-    sudo ip route del "$route" dev "$interface" >/dev/null 2>&1
-  done
-  if $started; then
-    sudo wg-quick down "$interface" >/dev/null 2>&1
-  fi
+  sudo wg-quick down "$interface" >/dev/null 2>&1
   sudo rm -f "$installed"
   if [[ -n $source_profile && $source_profile != "$installed" ]]; then
     rm -f -- "$source_profile"
   fi
 }
-trap cleanup EXIT INT TERM HUP
 
+if [[ $mode == cleanup ]]; then
+  for command in wg-quick realpath sudo; do
+    command -v "$command" >/dev/null || fail "missing prerequisite: $command"
+  done
+  source_profile=$(realpath -m "${profile:-$canonical_source}")
+  cleanup
+  pass "WireGuard tunnel and profile artifacts removed"
+  exit 0
+fi
+
+[[ -n $profile && -f $profile ]] || usage
 for command in wg wg-quick ip curl nc awk grep stat realpath sudo; do
   command -v "$command" >/dev/null || fail "missing prerequisite: $command"
 done
-[[ -n $profile && -f $profile ]] || fail "usage: $0 <viberange-${slot}.conf>"
 source_profile=$(realpath "$profile")
-[[ $interface =~ ^[a-zA-Z0-9_=+.-]{1,15}$ ]] || fail "unsafe WireGuard interface name"
+trap 'if ! $leave_running; then cleanup; fi' EXIT
+trap 'leave_running=false; exit 130' INT TERM HUP
 
 sudo install -o root -g root -m 0600 "$source_profile" "$installed"
 [[ $(sudo stat -c %a "$installed") == 600 ]] || fail "installed profile is not mode 0600"
@@ -269,7 +312,6 @@ pass "profile metadata and AllowedIPs validated"
 
 sudo wg-quick down "$interface" >/dev/null 2>&1 || true
 sudo wg-quick up "$interface"
-started=true
 
 actual_address=$(ip -o -4 address show dev "$interface" | awk '{print $4; exit}')
 [[ $actual_address == "$expected_client" ]] || fail "live interface address mismatch"
@@ -277,6 +319,7 @@ ip route get "$service_ip" | grep -q "dev $interface" || fail "assigned service 
 
 handshake=0
 for _ in $(seq 1 15); do
+  curl --connect-timeout 2 -fsS "http://${service_ip}:3488/health" >/dev/null 2>&1 || true
   handshake=$(sudo wg show "$interface" latest-handshakes | awk 'NR==1 {print $2}')
   [[ ${handshake:-0} -gt 0 ]] && break
   sleep 2
@@ -289,52 +332,10 @@ nc -zvw5 "$service_ip" 8889 >/dev/null 2>&1 || fail "Jupyter TCP/8889 is unreach
 range_prefix=${service_ip%.10.10}
 nc -zvw5 "${range_prefix}.20.20" 8888 >/dev/null 2>&1 || fail "Caldera TCP/8888 is unreachable"
 pass "assigned CH-UI, Jupyter, and Caldera services"
+printf 'GO: assigned services are reachable.\n'
 
-for target_port in \
-  "${service_ip}:22" \
-  "${range_prefix}.20.20:22" \
-  "${range_prefix}.30.30:22" \
-  "${range_prefix}.30.30:1230"
-do
-  host=${target_port%:*}; port=${target_port##*:}
-  if nc -zvw3 "$host" "$port" >/dev/null 2>&1; then
-    fail "unapproved assigned-range service reachable: $target_port"
-  fi
-done
-pass "unapproved assigned-range services denied"
-
-peer=$(sudo wg show "$interface" peers | head -1)
-[[ -n $peer ]] || fail "server peer is missing"
-old_allowed=$(sudo wg show "$interface" allowed-ips | awk -v peer="$peer" '$1==peer {$1=""; sub(/^[ \t]+/,""); print}')
-[[ -n $old_allowed ]] || fail "could not save original peer AllowedIPs"
-
-adversarial=(198.51.100.1/32 10.6.0.0/16 10.7.0.0/16 10.10.0.0/16 10.11.66.0/24 10.11.100.0/24 10.12.0.0/16 10.13.0.0/16)
-expanded=$old_allowed
-for route in "${adversarial[@]}"; do
-  [[ ,$expanded, == *,$route,* ]] || expanded+=",$route"
-done
-sudo wg set "$interface" peer "$peer" allowed-ips "$expanded"
-for route in "${adversarial[@]}"; do
-  [[ $route == "$expected_range" ]] && continue
-  sudo ip route replace "$route" dev "$interface"
-  added_routes+=("$route")
-done
-
-for target in 10.6.10.10 10.7.10.10 10.10.10.10 10.12.10.10 10.13.10.10; do
-  [[ $target == "$service_ip" ]] && continue
-  for port in 22 3488 8889; do
-    if nc -zvw3 "$target" "$port" >/dev/null 2>&1; then
-      fail "cross-range service reachable: $target:$port"
-    fi
-  done
-done
-for host in 198.51.100.1 10.11.66.100 10.11.100.100; do
-  for port in 22 3128 8006 8080 8081; do
-    if nc -zvw3 "$host" "$port" >/dev/null 2>&1; then
-      fail "management service reachable: $host:$port"
-    fi
-  done
-done
-pass "cross-range and management services denied after adversarial route expansion"
-printf 'GO: assigned services passed and every denied probe remained blocked.\n'
+if [[ $mode == background ]]; then
+  leave_running=true
+  printf 'WireGuard remains active as %s. Run %s --cleanup when finished.\n' "$interface" "$0"
+fi
 `
