@@ -549,6 +549,43 @@ func TestWrongChannelResponseLinksConfiguredChannel(t *testing.T) {
 	}
 }
 
+func TestDiscordResourceValidationRetriesInProcess(t *testing.T) {
+	attempts := 0
+	bot := &Bot{
+		log:                  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		resourceRetryInitial: time.Millisecond,
+		resourceRetryMaximum: 2 * time.Millisecond,
+		resourceValidationOverride: func() error {
+			attempts++
+			if attempts < 3 {
+				return errors.New("Discord missing access")
+			}
+			return nil
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := bot.waitForResources(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts=%d, want 3", attempts)
+	}
+}
+
+func TestDiscordResourceValidationRetryStopsWithContext(t *testing.T) {
+	bot := &Bot{
+		log:                        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		resourceRetryInitial:       time.Hour,
+		resourceValidationOverride: func() error { return errors.New("Discord missing access") },
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := bot.waitForResources(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("error=%v, want context cancellation", err)
+	}
+}
+
 func TestCommandRateLimit(t *testing.T) {
 	now := time.Date(2026, 11, 7, 18, 0, 0, 0, time.UTC)
 	bot := &Bot{commandInterval: time.Second, now: func() time.Time { return now }}

@@ -79,7 +79,10 @@ local CLI ──SQLite jobs──────────>|-- transactional leas
                                   `-- SQLite WAL database
 ```
 
-No public inbound HTTP service is required.
+No public inbound HTTP service is required. If Discord temporarily denies the
+configured channel, the Gateway remains fail-closed and retries resource
+validation with bounded exponential backoff while lifecycle workers continue;
+systemd uses a slower fallback restart interval for actual process failures.
 
 The core depends on the small `internal/ludus.Client` interface. Standard Ludus
 REST endpoints provide inventory/reset operations; a root-context native Ludus

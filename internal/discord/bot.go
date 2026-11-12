@@ -23,23 +23,26 @@ import (
 )
 
 type Bot struct {
-	session                   *discordgo.Session
-	store                     *store.Store
-	commands                  *app.Service
-	ludus                     ludus.Client
-	guildID                   string
-	channelID                 string
-	participantRoleID         string
-	leaseDuration             time.Duration
-	mode                      string
-	log                       *slog.Logger
-	rateMu                    sync.Mutex
-	lastCommand               map[string]time.Time
-	commandInterval           time.Duration
-	now                       func() time.Time
-	eligibilityOverride       func(string) (bool, error)
-	dmReadinessOverride       func(string) error
-	productionHandoffOverride func(*domain.Assignment, []byte) error
+	session                    *discordgo.Session
+	store                      *store.Store
+	commands                   *app.Service
+	ludus                      ludus.Client
+	guildID                    string
+	channelID                  string
+	participantRoleID          string
+	leaseDuration              time.Duration
+	mode                       string
+	log                        *slog.Logger
+	rateMu                     sync.Mutex
+	lastCommand                map[string]time.Time
+	commandInterval            time.Duration
+	now                        func() time.Time
+	eligibilityOverride        func(string) (bool, error)
+	dmReadinessOverride        func(string) error
+	productionHandoffOverride  func(*domain.Assignment, []byte) error
+	resourceValidationOverride func() error
+	resourceRetryInitial       time.Duration
+	resourceRetryMaximum       time.Duration
 }
 
 func New(tokenFile, guildID, channelID, participantRoleID, mode string, leaseDuration, cooldownDuration time.Duration, database *store.Store, log *slog.Logger, ludusClients ...ludus.Client) (*Bot, error) {
@@ -91,8 +94,11 @@ func (b *Bot) Run(ctx context.Context) error {
 		return fmt.Errorf("open Discord gateway: %w", err)
 	}
 	defer b.session.Close()
-	if err := b.validateResources(); err != nil {
-		return fmt.Errorf("validate Discord resources: %w", err)
+	if err := b.waitForResources(ctx); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+		return err
 	}
 	if err := b.registerCommands(); err != nil {
 		return fmt.Errorf("register Discord commands: %w", err)
@@ -109,6 +115,44 @@ func (b *Bot) Run(ctx context.Context) error {
 			b.dispatch(ctx)
 		}
 	}
+}
+
+func (b *Bot) waitForResources(ctx context.Context) error {
+	delay := b.resourceRetryInitial
+	if delay <= 0 {
+		delay = 5 * time.Second
+	}
+	maximum := b.resourceRetryMaximum
+	if maximum <= 0 {
+		maximum = 5 * time.Minute
+	}
+	for {
+		err := b.validateConfiguredResources()
+		if err == nil {
+			return nil
+		}
+		b.log.Warn("Discord resources unavailable; retrying without exiting", "retry_in", delay, "error", err)
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+		if delay < maximum {
+			delay *= 2
+			if delay > maximum {
+				delay = maximum
+			}
+		}
+	}
+}
+
+func (b *Bot) validateConfiguredResources() error {
+	if b.resourceValidationOverride != nil {
+		return b.resourceValidationOverride()
+	}
+	return b.validateResources()
 }
 
 func (b *Bot) validateResources() error {
