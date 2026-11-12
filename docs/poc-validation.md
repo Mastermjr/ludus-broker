@@ -68,25 +68,32 @@ The dedicated broker VM's SQLite state survived reboot. Encrypted online backup,
 off-VM copy, restore, and integrity testing passed. Required Discord and Ludus
 egress and restricted management ingress were verified.
 
-Human user1 acceptance passed `/range join`, `/range status`, and `/range leave`,
-private DM handoff delivery, real WireGuard handshake, generation revocation,
-30-minute cooldown and audited thaw, assigned CH-UI/Jupyter/Caldera access, and
-adversarial same-range, cross-range, Ludus, Proxmox, and management denial. The
+Live Discord acceptance established three simultaneous healthy leases on
+user1–user3 for distinct participants, each with a recorded WireGuard handshake.
+The queue preserved FIFO claims and delivered private ZIP/Markdown handoffs;
+`/range status` and `/range leave` exercised assigned and draining states.
+User1 additionally passed generation revocation, 30-minute cooldown and audited
+thaw, assigned CH-UI/Jupyter/Caldera access, and adversarial same-range,
+cross-range, Ludus, Proxmox, and management denial.
+
+Discord-free user4 and user5 acceptance each issued a fresh protected profile,
+established a real handshake, reached assigned CH-UI, JupyterLab, and Caldera,
+passed an operator-side denied-service probe, always tore the interface down,
+revoked the exact generation, deleted transient profile material, and reconciled
+the available broker generation. Together these runs cover all five slots. The
 plugin v1.1 router cleanup passed direct and integrated reset validation, and
 post-reset CH-UI stale-PID recovery was independently confirmed.
 
-## Remaining production gates
-
-The supervised-testing release has two delegated evidence tasks:
-
-- repeat final WireGuard acceptance on user2–user5;
-- publish the sanitized all-slot acceptance record and final operations notes.
+## Completed production gates
 
 The broker and encrypted-backup timer are enabled across reboot. Two consecutive
 VM reboots confirmed SQLite state preservation and automatic recovery: the
 first service attempt may fail closed before the private route is installed,
 then systemd retry connects to plugin v1.1.0, validates every approved slot,
-reconnects Discord, and remains active. User2–user5 acceptance and the final
-sanitized report remain delegated to live-agent testing.
+reconnects Discord, and remains active. Discord resource denial now retries
+in-process with bounded exponential backoff while lifecycle workers remain
+available, with a 30-second systemd fallback for actual process crashes.
 
-No normal-user browser automation or synthetic Discord user account is used.
+No normal-user browser automation is used. The final acceptance used real
+Discord participants for user1–user3 and approved disposable out-of-band Linux
+clients for user4–user5.

@@ -12,8 +12,9 @@ handoffs for Linux and Windows, Discord resource discovery, and live Discord/Lud
 Ludus 2.3 plugin is installed and live join/status/leave, revocation, router
 cleanup, backup/restore, user1 isolation acceptance, and two consecutive VM
 reboot recovery checks have passed. The broker and encrypted-backup timer are
-enabled across reboot; user2–user5 acceptance and final sanitized evidence
-remain delegated to live-agent testing.
+enabled across reboot. Three simultaneous Discord leases on user1–user3 and
+Discord-free user4/user5 connectivity, service, revocation, and cleanup checks
+complete the all-slot acceptance record.
 
 ## Participant experience
 

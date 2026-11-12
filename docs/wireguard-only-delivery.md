@@ -148,10 +148,12 @@ Before production cutover:
 - logs, SQLite, backups, diagnostics, and tracked files contain no profile or
   private key.
 
-The plugin is installed and user1 profile/revocation, router cleanup, and
-network-isolation acceptance have passed. The service is suitable for
-multi-slot testing. User2–user5 repetition and sanitized evidence remain
-delegated to live-agent validation. The broker service and encrypted-backup
-timer are enabled across reboot; two consecutive VM reboot checks confirmed
-fail-closed startup, automatic retry after early network unavailability, plugin
-health, all-slot blueprint approval, Discord reconnection, and SQLite state.
+The plugin is installed and all five slots have passed live profile, handshake,
+intended-service, revocation, and cleanup acceptance. Three real Discord users
+held simultaneous healthy leases on user1–user3; approved disposable Linux
+clients completed Discord-free user4/user5 checks. Operator isolation probes,
+router cleanup, and generation reconciliation passed. The broker service and
+encrypted-backup timer are enabled across reboot; two consecutive VM reboot
+checks confirmed fail-closed startup, automatic retry after early network
+unavailability, plugin health, all-slot blueprint approval, Discord
+reconnection, and SQLite state.
