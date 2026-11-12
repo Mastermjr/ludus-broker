@@ -394,6 +394,120 @@ func (s *Store) ReconcileAvailableGeneration(ctx context.Context, slotID string,
 	return tx.Commit()
 }
 
+func (s *Store) CreateRestoreSlotJob(ctx context.Context, slotID string, generation int64, peerID string, issuedAt time.Time, revokedAt *time.Time) (int64, error) {
+	if slotID == "" || generation <= 0 || peerID == "" || issuedAt.IsZero() {
+		return 0, errors.New("slot, positive generation, peer ID, and issue time are required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	var current int64
+	var state domain.SlotState
+	var owner sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT generation, state, lease_owner FROM slots WHERE id = ?`, slotID).Scan(&current, &state, &owner); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrNotFound
+		}
+		return 0, err
+	}
+	switch state {
+	case domain.SlotAvailable, domain.SlotAssigned, domain.SlotDraining, domain.SlotQuarantined:
+	default:
+		return 0, fmt.Errorf("restore-slot refuses slot %s while state is %s", slotID, state)
+	}
+	if generation < current {
+		return 0, fmt.Errorf("refusing plugin generation %d older than broker generation %d", generation, current)
+	}
+	var activeJobs int
+	if err := tx.QueryRowContext(ctx, `SELECT count() FROM jobs
+		WHERE slot_id = ? AND state IN ('PENDING', 'RUNNING')`, slotID).Scan(&activeJobs); err != nil {
+		return 0, err
+	}
+	if activeJobs != 0 {
+		return 0, errors.New("restore-slot requires no active lifecycle job")
+	}
+	var activeReservations int
+	if err := tx.QueryRowContext(ctx, `SELECT count() FROM reservations
+		WHERE assigned_slot = ? AND state IN ('PREPARING', 'ASSIGNED', 'DRAINING')`, slotID).Scan(&activeReservations); err != nil {
+		return 0, err
+	}
+	if activeReservations > 1 || activeReservations == 1 && (!owner.Valid || owner.String == "") {
+		return 0, errors.New("restore-slot found ambiguous active reservation state")
+	}
+	if activeReservations == 0 && owner.Valid && owner.String != "" {
+		return 0, errors.New("restore-slot found a lease owner without an active reservation")
+	}
+	if activeReservations == 1 {
+		var matching int
+		if err := tx.QueryRowContext(ctx, `SELECT count() FROM reservations
+			WHERE assigned_slot = ? AND discord_user_id = ?
+			AND state IN ('ASSIGNED', 'DRAINING')`, slotID, owner.String).Scan(&matching); err != nil {
+			return 0, err
+		}
+		if matching != 1 {
+			return 0, errors.New("restore-slot reservation does not match the lease owner")
+		}
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	var revoked any
+	if revokedAt != nil {
+		revoked = revokedAt.UTC().Format(time.RFC3339Nano)
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE slots SET generation = ?, wireguard_peer_id = ?,
+		wireguard_issued_at = ?, wireguard_revoked_at = ?, wireguard_first_handshake_at = NULL,
+		updated_at = ? WHERE id = ? AND generation = ?`, generation, peerID,
+		issuedAt.UTC().Format(time.RFC3339Nano), revoked, now, slotID, current)
+	if err != nil {
+		return 0, err
+	}
+	if changed, err := result.RowsAffected(); err != nil || changed != 1 {
+		if err != nil {
+			return 0, err
+		}
+		return 0, errors.New("slot changed while creating restore job")
+	}
+	key := fmt.Sprintf("RESET:%s:%d", slotID, generation)
+	var jobID int64
+	var priorState string
+	err = tx.QueryRowContext(ctx, `SELECT id, state FROM jobs WHERE idempotency_key = ?`, key).Scan(&jobID, &priorState)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		result, err = tx.ExecContext(ctx, `INSERT INTO jobs(idempotency_key, slot_id, generation,
+			transition, state, attempts, next_attempt_at, created_at, updated_at)
+			VALUES(?, ?, ?, 'RESET', 'PENDING', 0, ?, ?, ?)`, key, slotID, generation, now, now, now)
+		if err != nil {
+			return 0, err
+		}
+		jobID, err = result.LastInsertId()
+		if err != nil {
+			return 0, err
+		}
+	case err != nil:
+		return 0, err
+	case priorState == "FAILED":
+		if _, err := tx.ExecContext(ctx, `UPDATE jobs SET state = 'PENDING', attempts = 0,
+			next_attempt_at = ?, last_error = NULL, updated_at = ? WHERE id = ? AND state = 'FAILED'`,
+			now, now, jobID); err != nil {
+			return 0, err
+		}
+	default:
+		return 0, fmt.Errorf("restore job for generation %d already exists in state %s", generation, priorState)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO audit_events
+		(occurred_at, actor, slot_id, action, result, detail)
+		VALUES(?, 'operator', ?, 'restore_slot', 'succeeded',
+		json_object('from_generation', ?, 'to_generation', ?, 'prior_state', ?, 'job_id', ?))`,
+		now, slotID, current, generation, state, jobID); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return jobID, nil
+}
+
 func (s *Store) CreateWireGuardDriftRecoveryJob(ctx context.Context, slotID string, generation int64, peerID string, issuedAt, revokedAt time.Time) (int64, error) {
 	if slotID == "" || generation <= 0 || peerID == "" || issuedAt.IsZero() || revokedAt.IsZero() {
 		return 0, errors.New("slot, positive generation, peer ID, issue time, and revocation time are required")

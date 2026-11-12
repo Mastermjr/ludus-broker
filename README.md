@@ -49,7 +49,7 @@ vbr thaw <discord-user-id> --yes
 vbr reset user3 --yes
 vbr quarantine user3 --yes
 vbr recover user3 --yes
-vbr recover-wireguard-drift user3 --yes
+vbr restore-slot user3 --yes
 vbr doctor
 vbr selftest
 vbr discord discover
@@ -58,6 +58,11 @@ vbr ludus inventory user3
 
 Read-only commands query SQLite. Mutations insert durable typed jobs that the
 running `serve` process executes with its protected Ludus credential.
+`restore-slot` is the state-aware instructor operation for revoking the
+authoritative current peer, reconciling out-of-band generation drift, restoring
+the approved baseline, and returning an aligned slot to `AVAILABLE`; it refuses
+in-flight preparation, ambiguous jobs/reservations, or unapproved blueprint
+drift.
 
 ## Architecture
 

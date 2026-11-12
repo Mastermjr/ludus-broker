@@ -35,6 +35,65 @@ func TestSchemaCannotPersistWireGuardProfiles(t *testing.T) {
 	}
 }
 
+func TestCreateRestoreSlotJobAdoptsAuthoritativeGeneration(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "broker.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	if err := store.SeedSlots(ctx, []string{"user2"}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := store.db.Exec(`INSERT INTO reservations
+		(discord_user_id, state, requested_at, assigned_slot) VALUES('participant', 'ASSIGNED', ?, 'user2')`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`UPDATE slots SET state = 'ASSIGNED', generation = 3,
+		lease_owner = 'participant' WHERE id = 'user2'`); err != nil {
+		t.Fatal(err)
+	}
+	issued := time.Now().UTC().Add(-time.Minute)
+	jobID, err := store.CreateRestoreSlotJob(ctx, "user2", 6, "sha256:authoritative", issued, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var generation int64
+	var state, peerID, revoked, jobState string
+	if err := store.db.QueryRow(`SELECT generation, state, wireguard_peer_id,
+		COALESCE(wireguard_revoked_at, '') FROM slots WHERE id = 'user2'`).Scan(&generation, &state, &peerID, &revoked); err != nil {
+		t.Fatal(err)
+	}
+	if generation != 6 || state != "ASSIGNED" || peerID != "sha256:authoritative" || revoked != "" {
+		t.Fatalf("generation=%d state=%s peer=%s revoked=%s", generation, state, peerID, revoked)
+	}
+	if err := store.db.QueryRow(`SELECT state FROM jobs WHERE id = ?`, jobID).Scan(&jobState); err != nil {
+		t.Fatal(err)
+	}
+	if jobState != "PENDING" {
+		t.Fatalf("job state=%s", jobState)
+	}
+}
+
+func TestCreateRestoreSlotJobRefusesInFlightPreparation(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "broker.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	if err := store.SeedSlots(ctx, []string{"user1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`UPDATE slots SET state = 'PREPARING', generation = 1 WHERE id = 'user1'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateRestoreSlotJob(ctx, "user1", 1, "sha256:peer", time.Now().UTC(), nil); err == nil || !strings.Contains(err.Error(), "PREPARING") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestCreateWireGuardDriftRecoveryJob(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "broker.db"))
 	if err != nil {

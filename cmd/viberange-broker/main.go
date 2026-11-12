@@ -313,6 +313,39 @@ func run(args []string) error {
 		}
 		fmt.Printf("reconciled %s broker generation to %d for next WireGuard generation %d\n", args[0], target, peer.Generation)
 		return nil
+	case "restore-slot":
+		if len(args) == 0 || strings.HasPrefix(args[0], "-") || !contains(args, "--yes") {
+			return errors.New("usage: viberange-broker restore-slot <slot> --yes")
+		}
+		if cfg.LudusURL == "" {
+			return errors.New("VBR_LUDUS_URL is required")
+		}
+		client, err := ludus.NewHTTPClient(ludus.HTTPOptions{
+			BaseURL: cfg.LudusURL, APIKeyFile: cfg.LudusAPIKeyFile,
+			InsecureSkipVerify:    cfg.LudusInsecureSkipVerify,
+			TLSCertSHA256:         cfg.LudusTLSCertSHA256,
+			BlueprintSHA256:       cfg.LudusBlueprintSHA256,
+			BlueprintSHA256ByUser: cfg.LudusBlueprintSHA256BySlot,
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := client.ValidateBlueprint(ctx, args[0]); err != nil {
+			return err
+		}
+		peer, err := client.WireGuardStatus(ctx, args[0])
+		if err != nil {
+			return err
+		}
+		if peer.Generation <= 0 || peer.PeerID == "" || peer.IssuedAt.IsZero() {
+			return errors.New("refusing slot restore because plugin peer metadata is incomplete")
+		}
+		jobID, err := database.CreateRestoreSlotJob(ctx, args[0], peer.Generation, peer.PeerID, peer.IssuedAt, peer.RevokedAt)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("created authoritative RESET job %d for %s at WireGuard generation %d\n", jobID, args[0], peer.Generation)
+		return nil
 	case "recover-wireguard-drift":
 		if len(args) == 0 || strings.HasPrefix(args[0], "-") || !contains(args, "--yes") {
 			return errors.New("usage: viberange-broker recover-wireguard-drift <slot> --yes")
@@ -938,6 +971,7 @@ Administrative jobs:
   extend <id> <duration> --yes  Extend an active lease
   release <id> --yes            Revoke and reset an active lease
   reconcile-wireguard <slot>    Align an available slot after out-of-band testing
+  restore-slot <slot> --yes     Revoke current access and restore a clean available slot
   recover-wireguard-drift <slot> --yes
                                 Adopt a proven-revoked newer peer and queue cleanup
   reset <slot> --yes            Request a clean reset
