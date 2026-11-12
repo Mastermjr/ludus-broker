@@ -1,0 +1,23 @@
+[Unit]
+Description=Encrypted online backup of VibeRange broker SQLite state
+After=viberange-broker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=-/var/lib/viberange-broker/broker.env
+ExecStart=/usr/local/libexec/viberange-broker-backup /var/backups/viberange-broker
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/backups/viberange-broker /var/lib/viberange-broker/state
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX

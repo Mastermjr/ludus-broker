@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public documentation placeholders that match Discord snowflake heuristics"
+regexes = [
+  '''123456789012345678''',
+]
+paths = [
+  '''(^|/)config\.example\.env$''',
+]

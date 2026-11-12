@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (($# == 0)); then
+  set -- help
+fi
+if [[ $1 == serve ]]; then
+  echo "error: use systemctl to manage the broker service; vbr refuses a second Gateway process" >&2
+  exit 2
+fi
+
+if [[ $EUID -ne 0 ]]; then
+  exec sudo -n -- "$0" "$@"
+fi
+
+state_root=${VBR_STATE_ROOT:-/var/lib/viberange-broker}
+service_user=${VBR_SERVICE_USER:-viberange-broker}
+binary=${VBR_BINARY:-/usr/local/bin/viberange-broker}
+env_file=$state_root/broker.env
+credentials=$state_root/credentials
+
+[[ -x $binary ]] || { echo "error: broker binary is missing: $binary" >&2; exit 1; }
+[[ -r $env_file ]] || { echo "error: broker environment is unreadable: $env_file" >&2; exit 1; }
+
+umask 077
+tmp=$(mktemp -d /run/viberange-admin.XXXXXX)
+trap 'rm -rf "$tmp"' EXIT
+chown "$service_user:$service_user" "$tmp"
+chmod 0700 "$tmp"
+
+install -o "$service_user" -g "$service_user" -m 0400 \
+  "$credentials/ludus-api-key" "$tmp/ludus-api-key"
+install -o "$service_user" -g "$service_user" -m 0400 \
+  "$credentials/discord-token" "$tmp/discord-token"
+
+set -a
+# shellcheck disable=SC1090
+source "$env_file"
+set +a
+export VBR_LUDUS_API_KEY_FILE=$tmp/ludus-api-key
+export VBR_DISCORD_TOKEN_FILE=$tmp/discord-token
+
+set +e
+runuser -u "$service_user" -p -- "$binary" "$@"
+status=$?
+set -e
+exit "$status"

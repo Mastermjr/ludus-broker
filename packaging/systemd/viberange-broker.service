@@ -1,0 +1,33 @@
+[Unit]
+Description=VibeRange participant reservation and turnover broker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=viberange-broker
+Group=viberange-broker
+ExecStart=/usr/local/bin/viberange-broker serve
+EnvironmentFile=-/var/lib/viberange-broker/broker.env
+LoadCredential=discord-token:/var/lib/viberange-broker/credentials/discord-token
+LoadCredential=ludus-api-key:/var/lib/viberange-broker/credentials/ludus-api-key
+Restart=on-failure
+RestartSec=5s
+StateDirectory=viberange-broker/state
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

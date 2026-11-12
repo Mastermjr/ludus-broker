@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily encrypted VibeRange broker state backup
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=15m
+Persistent=true
+Unit=viberange-broker-backup.service
+
+[Install]
+WantedBy=timers.target

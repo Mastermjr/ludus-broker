@@ -1,0 +1,18 @@
+/viberange-broker
+/.state/
+/.private/
+/.pi/
+/dist/
+*.db
+*.db-shm
+*.db-wal
+.env
+*.secret
+coverage.out
+
+# Beads is local operational state. Do not publish issue exports, comments, or
+# the embedded Dolt database; they may contain infrastructure context.
+/.beads/
+/.dolt/
+/.beads-credential-key
+*.gate.lock*

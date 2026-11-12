@@ -1,0 +1,32 @@
+[Unit]
+Description=Restricted SSH tunnel from VibeRange broker to Ludus API
+After=network-online.target
+Wants=network-online.target
+Before=viberange-broker.service
+
+[Service]
+Type=simple
+User=viberange-broker
+Group=viberange-broker
+EnvironmentFile=-/var/lib/viberange-broker/broker.env
+LoadCredential=ludus-tunnel:/var/lib/viberange-broker/credentials/ludus-tunnel
+LoadCredential=ludus-known-hosts:/var/lib/viberange-broker/credentials/ludus-known-hosts
+ExecStart=/usr/local/libexec/viberange-ludus-tunnel
+Restart=always
+RestartSec=10s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
