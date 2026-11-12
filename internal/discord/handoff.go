@@ -26,6 +26,20 @@ func validateHandoffMetadata(slot string, peer ludus.WireGuardPeer) error {
 	return nil
 }
 
+func handoffOverview(slot string, peer ludus.WireGuardPeer) ([]byte, error) {
+	if err := validateHandoffMetadata(slot, peer); err != nil {
+		return nil, err
+	}
+	values := strings.NewReplacer(
+		"@@SLOT@@", slot,
+		"@@CLIENT_IP@@", peer.ClientIP,
+		"@@ALLOWED_RANGE@@", peer.AllowedRange,
+		"@@SERVICE_IP@@", serviceIPForRange(peer.AllowedRange),
+		"@@CALDERA_IP@@", rangeHostIP(peer.AllowedRange, 20, 20),
+	)
+	return []byte(values.Replace(handoffOverviewTemplate)), nil
+}
+
 func linuxHandoffGuide(slot string, peer ludus.WireGuardPeer) ([]byte, error) {
 	if err := validateHandoffMetadata(slot, peer); err != nil {
 		return nil, err
@@ -65,6 +79,52 @@ func rangeHostIP(cidr string, vlan, host byte) string {
 	value := ip.To4()
 	return fmt.Sprintf("%d.%d.%d.%d", value[0], value[1], vlan, host)
 }
+
+const handoffOverviewTemplate = `# VibeRange WireGuard handoff
+
+Assignment: **@@SLOT@@**<br>
+Tunnel address: **@@CLIENT_IP@@**<br>
+Assigned range: **@@ALLOWED_RANGE@@**
+
+The accompanying ZIP contains your private, generation-bound WireGuard profile plus detailed Linux and Windows setup guides and acceptance scripts. Keep the ZIP and extracted **.conf** private; never paste the profile into Discord, tickets, logs, or screenshots.
+
+## Start here
+
+1. Download and extract ` + "`viberange-@@SLOT@@-handoff.zip`" + ` into a temporary directory.
+2. Choose the matching platform instructions below.
+3. Complete a handshake within ten minutes of assignment or the broker will automatically revoke the profile and reset the range.
+
+### Linux
+
+Install WireGuard tools, then run:
+
+~~~bash
+chmod 700 viberange-@@SLOT@@-acceptance.sh
+./viberange-@@SLOT@@-acceptance.sh ./viberange-@@SLOT@@.conf
+~~~
+
+Read ` + "`viberange-@@SLOT@@-linux-setup.md`" + ` inside the ZIP for package installation, manual setup, and cleanup details.
+
+### Windows 10/11
+
+Install official WireGuard for Windows from https://www.wireguard.com/install/. Extract the ZIP, open **PowerShell as Administrator**, then run:
+
+~~~powershell
+Set-ExecutionPolicy -Scope Process Bypass
+Unblock-File .\viberange-@@SLOT@@-acceptance.ps1
+.\viberange-@@SLOT@@-acceptance.ps1 -ProfilePath .\viberange-@@SLOT@@.conf
+~~~
+
+Read ` + "`viberange-@@SLOT@@-windows-setup.md`" + ` inside the ZIP for full installation, browser testing, ` + "`-KeepTunnel`" + `, and cleanup instructions.
+
+## Workshop endpoints
+
+- **CH-UI:** http://@@SERVICE_IP@@:3488
+- **JupyterLab:** http://@@SERVICE_IP@@:8889
+- **Caldera:** http://@@CALDERA_IP@@:8888
+
+Service credentials are intentionally not embedded. When finished, use **/range leave** in Discord and wait for cleanup to complete. Do not reuse a profile after revocation or reset.
+`
 
 const linuxGuideTemplate = `# VibeRange Linux WireGuard setup
 

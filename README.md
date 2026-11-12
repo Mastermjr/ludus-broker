@@ -23,10 +23,11 @@ remain delegated to live-agent testing.
 /range status
 ```
 
-When a slot is ready, the bot sends the participant one private ZIP containing a
+When a slot is ready, the bot sends the participant a private ZIP containing a
 fresh generation-bound WireGuard `.conf`, Linux and Windows setup guides, and
-bounded Bash and PowerShell acceptance scripts. The DM also states the slot and
-lease expiration. The peer is revoked at
+bounded Bash and PowerShell acceptance scripts. A non-secret Markdown overview
+is attached beside the ZIP for direct Discord preview. The DM also states the
+slot and lease expiration. The peer is revoked at
 expiry or after a ten-minute
 no-show, then the broker resets and verifies the range before returning it to
 the queue. Participants never receive a Ludus API key.

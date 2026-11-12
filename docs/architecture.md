@@ -310,7 +310,7 @@ A normal assignment performs:
 5. verify range identity, power, testing state, and readiness;
 6. issue a fresh generation-bound WireGuard peer through the Ludus plugin;
 7. persist only its peer fingerprint and issue timestamp;
-8. build one in-memory ZIP containing the `.conf`, Linux/Windows guides, and Bash/PowerShell acceptance scripts, then DM it with the exact expiration;
+8. build one in-memory ZIP containing the `.conf`, Linux/Windows guides, and Bash/PowerShell acceptance scripts, then DM it with a previewable non-secret Markdown overview and the exact expiration;
 9. mark the lease assigned only after successful DM upload.
 
 At expiration or early release, access is revoked before cleanup. The slot is

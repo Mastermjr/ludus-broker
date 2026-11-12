@@ -9,7 +9,8 @@ administrator credential solely for lifecycle automation.
 
 The profile is delivered inside one ZIP attachment in a private Discord DM from
 the bot. The archive also contains generated Linux and Windows setup guides and
-bounded Bash and PowerShell acceptance scripts. Slash-command acknowledgements, status, and failures remain ephemeral
+bounded Bash and PowerShell acceptance scripts. A separate non-secret Markdown
+overview is attached in the same DM so Discord can preview the initial steps. Slash-command acknowledgements, status, and failures remain ephemeral
 in the configured workshop channel. Public channel messages never contain the
 profile.
 
@@ -44,7 +45,7 @@ For a selected `user1`–`user5` slot, the broker must:
 5. persist only the generation, peer fingerprint, and issue timestamp;
 6. build one in-memory ZIP containing the `.conf`, non-secret Linux and Windows
    guides, and generated Bash and PowerShell acceptance scripts, then DM it to
-   the initiating Discord user;
+   the initiating Discord user beside a previewable non-secret Markdown overview;
 7. commit the lease only after Discord confirms the complete DM upload.
 
 Before mutating a range, the broker sends a private preparation notice to prove
@@ -56,7 +57,8 @@ be proven.
 
 ### Assignment
 
-The DM contains the slot label, expiration, and one slot-scoped ZIP. The archive
+The DM contains the slot label, expiration, one previewable Markdown overview,
+and one slot-scoped ZIP. The archive
 contains the `.conf`, Linux and Windows guides, and generated Bash and PowerShell
 acceptance scripts. Both scripts validate profile metadata, bring up the tunnel,
 check approved services, and tear down and remove the profile by default; the

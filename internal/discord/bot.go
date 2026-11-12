@@ -614,10 +614,15 @@ func (b *Bot) sendWireGuardDM(assignment *domain.Assignment, profile []byte, pee
 		return fmt.Errorf("generate WireGuard handoff archive: %w", err)
 	}
 	defer zero(archive)
-	message := fmt.Sprintf("**%s**\n\nSlot: `%s`\nExpires: %s\n\nKeep the ZIP and `.conf` private. Extract the single attached archive, then follow the Linux or Windows guide inside. Access stops when your lease ends.", prefix, assignment.SlotID, formatLeaseExpiration(assignment.LeaseEnd))
+	overview, err := handoffOverview(assignment.SlotID, peer)
+	if err != nil {
+		return fmt.Errorf("generate WireGuard handoff overview: %w", err)
+	}
+	message := fmt.Sprintf("**%s**\n\nSlot: `%s`\nExpires: %s\n\nKeep the ZIP and `.conf` private. Discord can preview the attached Markdown overview; the ZIP contains your profile and complete Linux/Windows setup files. Access stops when your lease ends.", prefix, assignment.SlotID, formatLeaseExpiration(assignment.LeaseEnd))
 	_, err = b.session.ChannelMessageSendComplex(channel.ID, &discordgo.MessageSend{
 		Content: message,
 		Files: []*discordgo.File{
+			{Name: "viberange-" + assignment.SlotID + "-README.md", ContentType: "text/markdown", Reader: bytes.NewReader(overview)},
 			{Name: "viberange-" + assignment.SlotID + "-handoff.zip", ContentType: "application/zip", Reader: bytes.NewReader(archive)},
 		},
 	})

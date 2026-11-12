@@ -248,6 +248,32 @@ func TestLinuxHandoffAssetsAreScopedAndSecretFree(t *testing.T) {
 	}
 }
 
+func TestHandoffOverviewIsVisiblePlatformNeutralAndSecretFree(t *testing.T) {
+	peer := ludus.WireGuardPeer{UserID: "user3", ClientIP: "198.51.100.6/32", AllowedRange: "10.10.0.0/16"}
+	overview, err := handoffOverview("user3", peer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value := string(overview)
+	for _, expected := range []string{
+		"user3", "198.51.100.6/32", "10.10.0.0/16", "10.10.10.10", "10.10.20.20",
+		"viberange-user3-handoff.zip", "viberange-user3-acceptance.sh", "viberange-user3-acceptance.ps1",
+		"Linux", "Windows 10/11", "ten minutes",
+	} {
+		if !strings.Contains(value, expected) {
+			t.Errorf("overview omitted %q", expected)
+		}
+	}
+	for _, forbidden := range []string{"@@", "PrivateKey =", "participant-private", "token="} {
+		if strings.Contains(value, forbidden) {
+			t.Errorf("overview contains template token or secret marker %q", forbidden)
+		}
+	}
+	if _, err := handoffOverview("../bad", peer); err == nil {
+		t.Fatal("unsafe overview slot was accepted")
+	}
+}
+
 func TestWindowsHandoffAssetsAreGeneralized(t *testing.T) {
 	peer := ludus.WireGuardPeer{UserID: "user4", ClientIP: "198.51.100.7/32", AllowedRange: "10.12.0.0/16"}
 	guide, err := windowsHandoffGuide("user4", peer)
