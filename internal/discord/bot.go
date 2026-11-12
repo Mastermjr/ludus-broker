@@ -321,7 +321,28 @@ func (b *Bot) status(ctx context.Context, userID string) string {
 		b.log.Error("reservation status failed", "error", err)
 		return "The queue is temporarily unavailable. Please try again."
 	}
+	if reservation.AssignedSlot != "" {
+		slotState, slotErr := b.store.SlotState(ctx, reservation.AssignedSlot)
+		if slotErr != nil {
+			b.log.Error("reservation slot status failed", "slot", reservation.AssignedSlot, "error", slotErr)
+			return "The queue is temporarily unavailable. Please try again."
+		}
+		return describeReservationWithSlotState(reservation, slotState) + "\n\n" + rangeLifecycleHelp()
+	}
 	return describeReservation(reservation) + "\n\n" + rangeLifecycleHelp()
+}
+
+func describeReservationWithSlotState(reservation domain.Reservation, slotState domain.SlotState) string {
+	switch slotState {
+	case domain.SlotQuarantined:
+		return fmt.Sprintf("**%s** is **QUARANTINED**: cleanup could not be proven and instructor recovery is required. Your reservation remains **DRAINING** until recovery completes.", reservation.AssignedSlot)
+	case domain.SlotResetting:
+		return fmt.Sprintf("**%s** is **RESETTING**: WireGuard access has been revoked and the clean baseline is being restored.", reservation.AssignedSlot)
+	case domain.SlotVerifying:
+		return fmt.Sprintf("**%s** is **VERIFYING**: the restored baseline is undergoing safety checks.", reservation.AssignedSlot)
+	default:
+		return describeReservation(reservation)
+	}
 }
 
 func describeReservation(reservation domain.Reservation) string {

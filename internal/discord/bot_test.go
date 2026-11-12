@@ -394,6 +394,15 @@ func TestStatusDescriptionsExplainLifecycle(t *testing.T) {
 			t.Errorf("describeReservation(%s)=%q, want %q", test.reservation.State, got, test.want)
 		}
 	}
+	draining := domain.Reservation{State: "DRAINING", AssignedSlot: "user2"}
+	quarantined := describeReservationWithSlotState(draining, domain.SlotQuarantined)
+	if !strings.Contains(quarantined, "**QUARANTINED**") || !strings.Contains(quarantined, "instructor recovery") || !strings.Contains(quarantined, "remains **DRAINING**") {
+		t.Fatalf("quarantined participant status was ambiguous: %q", quarantined)
+	}
+	resetting := describeReservationWithSlotState(draining, domain.SlotResetting)
+	if !strings.Contains(resetting, "**RESETTING**") {
+		t.Fatalf("resetting participant status omitted slot state: %q", resetting)
+	}
 	expiration := formatLeaseExpiration(time.Date(2026, 11, 11, 10, 2, 48, 0, time.UTC))
 	if expiration != "<t:1794391368:F> (UTC: 2026-11-11 10:02:48Z)" {
 		t.Fatalf("expiration=%q", expiration)

@@ -220,6 +220,20 @@ func (s *Store) SlotCount(ctx context.Context) (int, error) {
 	return count, err
 }
 
+func (s *Store) SlotState(ctx context.Context, slotID string) (domain.SlotState, error) {
+	if slotID == "" {
+		return "", errors.New("slot ID is required")
+	}
+	var state domain.SlotState
+	if err := s.db.QueryRowContext(ctx, `SELECT state FROM slots WHERE id = ?`, slotID).Scan(&state); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	return state, nil
+}
+
 func (s *Store) ListSlots(ctx context.Context) ([]domain.Slot, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, ludus_user, range_id, state, generation, lease_owner,
