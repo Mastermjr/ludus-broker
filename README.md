@@ -49,6 +49,7 @@ vbr thaw <discord-user-id> --yes
 vbr reset user3 --yes
 vbr quarantine user3 --yes
 vbr recover user3 --yes
+vbr recover-wireguard-drift user3 --yes
 vbr doctor
 vbr selftest
 vbr discord discover

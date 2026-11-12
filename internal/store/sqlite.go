@@ -394,6 +394,81 @@ func (s *Store) ReconcileAvailableGeneration(ctx context.Context, slotID string,
 	return tx.Commit()
 }
 
+func (s *Store) CreateWireGuardDriftRecoveryJob(ctx context.Context, slotID string, generation int64, peerID string, issuedAt, revokedAt time.Time) (int64, error) {
+	if slotID == "" || generation <= 0 || peerID == "" || issuedAt.IsZero() || revokedAt.IsZero() {
+		return 0, errors.New("slot, positive generation, peer ID, issue time, and revocation time are required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	var current int64
+	var state domain.SlotState
+	var owner sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT generation, state, lease_owner FROM slots WHERE id = ?`, slotID).Scan(&current, &state, &owner); err != nil {
+		return 0, err
+	}
+	if state != domain.SlotQuarantined || !owner.Valid || owner.String == "" {
+		return 0, errors.New("WireGuard drift recovery requires an owned QUARANTINED slot")
+	}
+	if generation <= current {
+		return 0, fmt.Errorf("recovery generation %d must be newer than broker generation %d", generation, current)
+	}
+	var draining, activeJobs int
+	if err := tx.QueryRowContext(ctx, `SELECT count() FROM reservations
+		WHERE assigned_slot = ? AND discord_user_id = ? AND state = 'DRAINING'`, slotID, owner.String).Scan(&draining); err != nil {
+		return 0, err
+	}
+	if draining != 1 {
+		return 0, errors.New("WireGuard drift recovery requires exactly one matching DRAINING reservation")
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT count() FROM jobs
+		WHERE slot_id = ? AND state IN ('PENDING', 'RUNNING')`, slotID).Scan(&activeJobs); err != nil {
+		return 0, err
+	}
+	if activeJobs != 0 {
+		return 0, errors.New("WireGuard drift recovery requires no active lifecycle job")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	result, err := tx.ExecContext(ctx, `UPDATE slots SET generation = ?, wireguard_peer_id = ?,
+		wireguard_issued_at = ?, wireguard_revoked_at = ?, wireguard_first_handshake_at = NULL,
+		updated_at = ? WHERE id = ? AND generation = ? AND state = ?`, generation, peerID,
+		issuedAt.UTC().Format(time.RFC3339Nano), revokedAt.UTC().Format(time.RFC3339Nano), now,
+		slotID, current, domain.SlotQuarantined)
+	if err != nil {
+		return 0, err
+	}
+	if changed, err := result.RowsAffected(); err != nil || changed != 1 {
+		if err != nil {
+			return 0, err
+		}
+		return 0, errors.New("slot changed during WireGuard drift recovery")
+	}
+	key := fmt.Sprintf("RESET:%s:%d", slotID, generation)
+	result, err = tx.ExecContext(ctx, `INSERT INTO jobs(idempotency_key, slot_id, generation,
+		transition, state, attempts, next_attempt_at, created_at, updated_at)
+		VALUES(?, ?, ?, 'RESET', 'PENDING', 0, ?, ?, ?)`, key, slotID, generation, now, now, now)
+	if err != nil {
+		return 0, err
+	}
+	jobID, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO audit_events
+		(occurred_at, actor, slot_id, action, result, detail)
+		VALUES(?, 'operator', ?, 'wireguard_drift_recovery', 'succeeded',
+		json_object('from_generation', ?, 'to_generation', ?, 'job_id', ?))`,
+		now, slotID, current, generation, jobID); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return jobID, nil
+}
+
 func (s *Store) CreateSlotJob(ctx context.Context, transition, slotID string) (int64, bool, error) {
 	allowed := map[string]bool{"RESET": true, "QUARANTINE": true, "RECOVER": true}
 	if !allowed[transition] {

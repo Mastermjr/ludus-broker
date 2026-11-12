@@ -35,6 +35,50 @@ func TestSchemaCannotPersistWireGuardProfiles(t *testing.T) {
 	}
 }
 
+func TestCreateWireGuardDriftRecoveryJob(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "broker.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	if err := store.SeedSlots(ctx, []string{"user2"}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := store.db.Exec(`INSERT INTO reservations
+		(discord_user_id, state, requested_at, assigned_slot) VALUES('participant', 'DRAINING', ?, 'user2')`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`UPDATE slots SET state = 'QUARANTINED', generation = 3,
+		lease_owner = 'participant' WHERE id = 'user2'`); err != nil {
+		t.Fatal(err)
+	}
+	issued := time.Now().UTC().Add(-time.Minute)
+	revoked := issued.Add(time.Second)
+	jobID, err := store.CreateWireGuardDriftRecoveryJob(ctx, "user2", 6, "sha256:newer", issued, revoked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var generation int64
+	var state, peerID, jobState, transition string
+	if err := store.db.QueryRow(`SELECT generation, state, wireguard_peer_id FROM slots WHERE id = 'user2'`).Scan(&generation, &state, &peerID); err != nil {
+		t.Fatal(err)
+	}
+	if generation != 6 || state != "QUARANTINED" || peerID != "sha256:newer" {
+		t.Fatalf("generation=%d state=%s peer=%s", generation, state, peerID)
+	}
+	if err := store.db.QueryRow(`SELECT state, transition FROM jobs WHERE id = ?`, jobID).Scan(&jobState, &transition); err != nil {
+		t.Fatal(err)
+	}
+	if jobState != "PENDING" || transition != "RESET" {
+		t.Fatalf("job state=%s transition=%s", jobState, transition)
+	}
+	if _, err := store.CreateWireGuardDriftRecoveryJob(ctx, "user2", 7, "sha256:other", issued, revoked); err == nil {
+		t.Fatal("second recovery was accepted while an active job exists")
+	}
+}
+
 func TestProductionPreparationLifecycle(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "broker.db"))
 	if err != nil {

@@ -313,6 +313,39 @@ func run(args []string) error {
 		}
 		fmt.Printf("reconciled %s broker generation to %d for next WireGuard generation %d\n", args[0], target, peer.Generation)
 		return nil
+	case "recover-wireguard-drift":
+		if len(args) == 0 || strings.HasPrefix(args[0], "-") || !contains(args, "--yes") {
+			return errors.New("usage: viberange-broker recover-wireguard-drift <slot> --yes")
+		}
+		if cfg.LudusURL == "" {
+			return errors.New("VBR_LUDUS_URL is required")
+		}
+		client, err := ludus.NewHTTPClient(ludus.HTTPOptions{
+			BaseURL: cfg.LudusURL, APIKeyFile: cfg.LudusAPIKeyFile,
+			InsecureSkipVerify:    cfg.LudusInsecureSkipVerify,
+			TLSCertSHA256:         cfg.LudusTLSCertSHA256,
+			BlueprintSHA256:       cfg.LudusBlueprintSHA256,
+			BlueprintSHA256ByUser: cfg.LudusBlueprintSHA256BySlot,
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := client.ValidateBlueprint(ctx, args[0]); err != nil {
+			return err
+		}
+		peer, err := client.WireGuardStatus(ctx, args[0])
+		if err != nil {
+			return err
+		}
+		if !peer.Revoked || peer.Generation <= 0 || peer.PeerID == "" || peer.IssuedAt.IsZero() || peer.RevokedAt == nil {
+			return errors.New("refusing drift recovery unless the plugin reports complete revoked peer metadata")
+		}
+		jobID, err := database.CreateWireGuardDriftRecoveryJob(ctx, args[0], peer.Generation, peer.PeerID, peer.IssuedAt, *peer.RevokedAt)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("adopted revoked WireGuard generation %d for %s and created RESET job %d\n", peer.Generation, args[0], jobID)
+		return nil
 	case "reset", "quarantine", "recover":
 		if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 			return fmt.Errorf("usage: viberange-broker %s <slot> --yes", command)
@@ -905,6 +938,8 @@ Administrative jobs:
   extend <id> <duration> --yes  Extend an active lease
   release <id> --yes            Revoke and reset an active lease
   reconcile-wireguard <slot>    Align an available slot after out-of-band testing
+  recover-wireguard-drift <slot> --yes
+                                Adopt a proven-revoked newer peer and queue cleanup
   reset <slot> --yes            Request a clean reset
   retry-job <id> --yes          Retry a failed quarantined lifecycle job
   run-job --yes                 Execute one pending production lifecycle job
