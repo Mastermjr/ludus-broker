@@ -85,7 +85,13 @@ To keep the tunnel connected for browser testing:
 
 Credentials and service tokens are intentionally not embedded in this archive.
 
-## 4. Disconnect and clean up
+## 4. Troubleshooting
+
+A running WireGuard tunnel service proves only that the local interface is enabled. The acceptance script also requires a handshake no more than 180 seconds old and successful assigned-service traffic. If it reports that no recent handshake exists, the profile may have been revoked, expired, reset, or removed from the live gateway; request a fresh assignment rather than repeatedly reinstalling the stale profile.
+
+The script treats the actual Windows service state as authoritative because the WireGuard installer process can occasionally return a nonzero exit code even after installing a running tunnel service. Failed validation always removes the service and protected profile, even when **-KeepTunnel** was requested.
+
+## 5. Disconnect and clean up
 
 If **-KeepTunnel** was used, run from an elevated PowerShell window:
 
@@ -123,6 +129,7 @@ $InstallDirectory = Join-Path $env:ProgramData 'VibeRange'
 $InstalledProfile = Join-Path $InstallDirectory "$Interface.conf"
 $TunnelService = 'WireGuardTunnel$' + $Interface
 $Started = $false
+$Validated = $false
 $SourceProfile = $null
 
 function Write-Pass([string]$Message) { Write-Host "PASS: $Message" }
@@ -148,8 +155,20 @@ function Assert-Denied {
     }
 }
 
+function Assert-Http {
+    param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Uri)
+    try {
+        $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 -Uri $Uri
+        if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) {
+            Stop-Failure "$Name returned HTTP $($response.StatusCode)"
+        }
+    }
+    catch { Stop-Failure "$Name is unreachable" }
+}
+
 function Remove-TunnelService {
-    & $WireGuardExe /uninstalltunnelservice $Interface 2>$null | Out-Null
+    if (-not (Get-Service -Name $TunnelService -ErrorAction SilentlyContinue)) { return }
+    $null = Start-Process -FilePath $WireGuardExe -Wait -PassThru -WindowStyle Hidden -ArgumentList @('/uninstalltunnelservice', $Interface)
     for ($attempt = 0; $attempt -lt 20; $attempt++) {
         if (-not (Get-Service -Name $TunnelService -ErrorAction SilentlyContinue)) { return }
         Start-Sleep -Milliseconds 500
@@ -182,22 +201,25 @@ try {
     if ($allowedEntries -contains '0.0.0.0/0' -or $allowedEntries -contains '::/0') { Stop-Failure 'default route is forbidden' }
     Write-Pass 'profile metadata and AllowedIPs validated'
 
+    Remove-TunnelService
     New-Item -ItemType Directory -Force $InstallDirectory | Out-Null
-    Copy-Item -LiteralPath $SourceProfile -Destination $InstalledProfile -Force
+    if ($SourceProfile -ne $InstalledProfile) {
+        Copy-Item -LiteralPath $SourceProfile -Destination $InstalledProfile -Force
+    }
     & icacls.exe $InstalledProfile /inheritance:r /grant:r '*S-1-5-32-544:(F)' '*S-1-5-18:(F)' | Out-Null
     if ($LASTEXITCODE -ne 0) { Stop-Failure 'could not protect the installed profile ACL' }
 
-    Remove-TunnelService
-    & $WireGuardExe /installtunnelservice $InstalledProfile
-    if ($LASTEXITCODE -ne 0) { Stop-Failure 'WireGuard tunnel service installation failed' }
-    $Started = $true
+    $install = Start-Process -FilePath $WireGuardExe -Wait -PassThru -WindowStyle Hidden -ArgumentList @('/installtunnelservice', $InstalledProfile)
     $service = $null
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
         $service = Get-Service -Name $TunnelService -ErrorAction SilentlyContinue
+        if ($service) { $Started = $true }
         if ($service -and $service.Status -eq 'Running') { break }
         Start-Sleep -Seconds 1
     }
-    if (-not $service -or $service.Status -ne 'Running') { Stop-Failure 'WireGuard tunnel service did not start' }
+    if (-not $service -or $service.Status -ne 'Running') {
+        Stop-Failure "WireGuard tunnel service did not start (installer exit $($install.ExitCode))"
+    }
 
     $liveAddress = Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias $Interface -ErrorAction SilentlyContinue |
         Where-Object { $_.IPAddress -eq $ExpectedClientAddress }
@@ -206,21 +228,25 @@ try {
     if (-not ($serviceRoute | Where-Object { $_.InterfaceAlias -eq $Interface })) { Stop-Failure 'assigned service does not route through WireGuard' }
 
     $handshake = 0L
+    $handshakeAge = [int64]::MaxValue
     for ($attempt = 0; $attempt -lt 15; $attempt++) {
-        $handshakeLine = & $WgExe show $Interface latest-handshakes | Select-Object -First 1
-        if ($handshakeLine) { $handshake = [int64](($handshakeLine -split '\s+')[-1]) }
-        if ($handshake -gt 0) { break }
         try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 "http://${ServiceIp}:3488/health" | Out-Null } catch {}
+        $handshakeLine = & $WgExe show $Interface latest-handshakes | Select-Object -First 1
+        if ($handshakeLine) {
+            $handshake = [int64](($handshakeLine -split '\s+')[-1])
+            if ($handshake -gt 0) {
+                $handshakeAge = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - $handshake
+            }
+        }
+        if ($handshakeAge -ge 0 -and $handshakeAge -le 180) { break }
         Start-Sleep -Seconds 2
     }
-    if ($handshake -le 0) { Stop-Failure 'no WireGuard handshake' }
-    Write-Pass 'tunnel address, route, and handshake'
-
-    try {
-        $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 -Uri "http://${ServiceIp}:3488/health"
-        if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) { Stop-Failure "CH-UI returned HTTP $($response.StatusCode)" }
+    if ($handshakeAge -lt 0 -or $handshakeAge -gt 180) {
+        Stop-Failure 'no recent WireGuard handshake; the profile may be revoked, expired, or absent from the live gateway'
     }
-    catch { Stop-Failure 'CH-UI health is unreachable' }
+    Write-Pass 'tunnel address, route, and recent handshake'
+
+    Assert-Http -Name 'CH-UI health' -Uri "http://${ServiceIp}:3488/health"
     if (-not (Test-TcpPort -TargetHost $ServiceIp -Port 8889 -TimeoutMilliseconds 5000)) { Stop-Failure 'Jupyter TCP/8889 is unreachable' }
     if (-not (Test-TcpPort -TargetHost $CalderaIp -Port 8888 -TimeoutMilliseconds 5000)) { Stop-Failure 'Caldera TCP/8888 is unreachable' }
     Write-Pass 'assigned CH-UI, Jupyter, and Caldera services'
@@ -229,11 +255,13 @@ try {
         Assert-Denied -TargetHost $probe[0] -Port $probe[1]
     }
     Write-Pass 'unapproved assigned-range services denied'
+    $Validated = $true
     Write-Host 'GO: assigned services passed and unapproved assigned-range probes remained blocked.'
 }
 finally {
-    if ($Started -and -not $KeepTunnel) { Remove-TunnelService }
-    if (-not $KeepTunnel) { Remove-Item -LiteralPath $InstalledProfile -Force -ErrorAction SilentlyContinue }
+    $leaveConnected = $KeepTunnel -and $Validated
+    if ($Started -and -not $leaveConnected) { Remove-TunnelService }
+    if (-not $leaveConnected) { Remove-Item -LiteralPath $InstalledProfile -Force -ErrorAction SilentlyContinue }
     if ($SourceProfile -and $SourceProfile -ne $InstalledProfile) { Remove-Item -LiteralPath $SourceProfile -Force -ErrorAction SilentlyContinue }
 }
 

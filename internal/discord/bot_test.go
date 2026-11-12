@@ -303,6 +303,24 @@ func TestWindowsHandoffAssetsAreGeneralized(t *testing.T) {
 	if !strings.Contains(string(script), "$DeniedIp = '10.12.30.30'") {
 		t.Fatal("PowerShell script did not derive the denied-service host from the assigned range")
 	}
+	for _, expected := range []string{
+		"Start-Process -FilePath $WireGuardExe", "$handshakeAge -le 180",
+		"profile may be revoked, expired, or absent from the live gateway",
+		"$leaveConnected = $KeepTunnel -and $Validated",
+		"if ($SourceProfile -ne $InstalledProfile)",
+	} {
+		if !strings.Contains(string(script), expected) {
+			t.Errorf("PowerShell script omitted reliability guard %q", expected)
+		}
+	}
+	for _, forbidden := range []string{"$userNumber", "$rangeOctet", "if ($handshake -gt 0) { break }"} {
+		if strings.Contains(string(script), forbidden) {
+			t.Errorf("PowerShell script retained unsafe inference or stale-handshake logic %q", forbidden)
+		}
+	}
+	if !strings.Contains(string(guide), "handshake no more than 180 seconds old") || !strings.Contains(string(guide), "Failed validation always removes") {
+		t.Fatal("Windows guide omitted current handshake and failed-cleanup diagnostics")
+	}
 	if _, lookupErr := exec.LookPath("pwsh"); lookupErr == nil {
 		path := filepath.Join(t.TempDir(), "acceptance.ps1")
 		if err := os.WriteFile(path, script, 0o600); err != nil {
