@@ -42,6 +42,7 @@ the management VM:
 vbr slots
 vbr participants
 vbr cooldowns
+vbr audit [--json]
 vbr queue
 vbr assign <discord-user-id> [--slot user3]
 vbr extend <discord-user-id> 30m --yes

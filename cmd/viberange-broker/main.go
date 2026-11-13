@@ -193,13 +193,22 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
+		names := map[string]string{}
+		ids := discordAuditActorIDs(events)
+		if len(ids) > 0 {
+			names, err = discord.ResolveDisplayNames(cfg.DiscordTokenFile, cfg.DiscordGuildID, ids)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: Discord audit names could not be fully resolved: %v\n", err)
+			}
+		}
+		values := auditEventViews(events, names)
 		if jsonOutput {
-			return printJSON(events)
+			return printJSON(values)
 		}
 		writer := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(writer, "TIME\tACTOR\tACTION\tRESULT\tSLOT")
-		for _, event := range events {
-			fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%s\n", event.OccurredAt.UTC().Format(time.RFC3339), event.Actor, event.Action, event.Result, dash(event.SlotID))
+		fmt.Fprintln(writer, "TIME\tACTOR ID\tUSERNAME\tACTION\tRESULT\tSLOT")
+		for _, event := range values {
+			fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%s\t%s\n", event.OccurredAt.UTC().Format(time.RFC3339), event.Actor, event.ActorDisplayName, event.Action, event.Result, dash(event.SlotID))
 		}
 		return writer.Flush()
 	case "thaw", "clear-cooldown":
